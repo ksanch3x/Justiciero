@@ -5,6 +5,9 @@ extends CharacterBody2D
 @export var max_health: int = 5
 @export var bullet_scene: PackedScene = preload("res://scenes/Bullet.tscn")
 
+var bullet_damage: int = 1
+var bullet_count: int = 1
+
 var health: int
 var fire_cooldown: float = 0.0
 
@@ -34,11 +37,25 @@ func _physics_process(delta: float) -> void:
 		fire_cooldown = fire_rate
 
 func _shoot() -> void:
-	var bullet := bullet_scene.instantiate()
-	get_tree().current_scene.add_child(bullet)
-	bullet.global_position = global_position
-	bullet.direction = (get_global_mouse_position() - global_position).normalized()
-	bullet.shooter = self
+	var base_dir := (get_global_mouse_position() - global_position).normalized()
+	var spread_deg := 8.0
+
+	for i in range(bullet_count):
+		var offset := 0.0
+		if bullet_count > 1:
+			offset = deg_to_rad(spread_deg) * (i - float(bullet_count - 1) / 2.0)
+		var dir := base_dir.rotated(offset)
+
+		var bullet := bullet_scene.instantiate()
+		bullet.direction = dir
+		bullet.shooter = self
+		bullet.damage = bullet_damage
+		get_tree().current_scene.add_child(bullet)
+		bullet.global_position = global_position
+
+func heal_to_full() -> void:
+	health = max_health
+	health_changed.emit(health, max_health)
 
 func take_damage(amount: int) -> void:
 	health -= amount

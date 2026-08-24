@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Enemy.tscn" id="3"]
+[ext_resource type="Script" path="res://scripts/UpgradeUI.gd" id="4"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -41,4 +42,33 @@ offset_left = 16.0
 offset_top = 16.0
 offset_right = 500.0
 offset_bottom = 48.0
-text = "Vida: 5/5   Enemigos eliminados: 0"
+text = "Oleada: 1   Vida: 5/5   Enemigos restantes: 0"
+
+[node name="UpgradeUI" type="CanvasLayer" parent="."]
+script = ExtResource("4")
+
+[node name="Dim" type="ColorRect" parent="UpgradeUI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.6)
+
+[node name="Panel" type="PanelContainer" parent="UpgradeUI"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -120.0
+offset_right = 160.0
+offset_bottom = 120.0
+
+[node name="Root" type="VBoxContainer" parent="UpgradeUI/Panel"]
+
+[node name="Title" type="Label" parent="UpgradeUI/Panel/Root"]
+text = "¡Oleada superada! Elegí una mejora:"
+horizontal_alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UpgradeUI/Panel/Root"]
+alignment = 1
