@@ -35,5 +35,6 @@ prototypes/
 
 - `games/justiciero/GDD.md`: documento de diseño v2, con decisiones tomadas y
   preguntas abiertas (ver sección 7 del documento).
-- Próximo paso sugerido: definir el "minuto de diversión" (pregunta abierta) creando
-  el primer prototipo en `prototypes/`.
+- `prototypes/combat-topdown/`: primer prototipo, combate top-down/shooter
+  (movimiento 8-direcciones, disparo apuntando con mouse, enemigos que persiguen
+  y hacen daño de contacto). Ver su README para detalle y cómo correrlo.
