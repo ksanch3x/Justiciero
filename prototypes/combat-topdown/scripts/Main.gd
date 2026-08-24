@@ -82,6 +82,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().reload_current_scene()
 
 func _update_hud() -> void:
-	var hp := _player.health if is_instance_valid(_player) else 0
+	var hp: int = 0
+	var max_hp: int = 0
+	if is_instance_valid(_player):
+		hp = _player.health
+		max_hp = _player.max_health
 	var alive_or_pending := enemies_alive + enemies_to_spawn
-	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d" % [wave_number, hp, _player.max_health, alive_or_pending]
+	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d" % [wave_number, hp, max_hp, alive_or_pending]
