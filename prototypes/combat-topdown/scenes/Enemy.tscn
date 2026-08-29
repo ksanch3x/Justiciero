@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Enemy.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Enemies/Tiles/tile_0008.png" id="2"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Enemies/Tiles/tile_0009.png" id="3"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Enemies/Tiles/tile_0010.png" id="4"]
+[ext_resource type="Texture2D" path="res://assets/generated/light_glow.tres" id="5"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_enemy"]
 radius = 14.0
@@ -41,3 +42,9 @@ texture_filter = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_enemy")
+
+[node name="Glow" type="PointLight2D" parent="."]
+texture = ExtResource("5")
+color = Color(1, 0.2, 0.15, 1)
+energy = 0.5
+texture_scale = 0.9

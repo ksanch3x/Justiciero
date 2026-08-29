@@ -26,6 +26,9 @@ texture = ExtResource("5")
 region_enabled = true
 region_rect = Rect2(0, 0, 2000, 2000)
 
+[node name="CanvasModulate" type="CanvasModulate" parent="."]
+color = Color(0.16, 0.16, 0.22, 1)
+
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(0, 0)
 
