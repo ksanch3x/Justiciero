@@ -42,4 +42,6 @@ func take_damage(amount: int) -> void:
 	health -= amount
 	if health <= 0:
 		died.emit()
-		queue_free()
+		Fx.play_death(self, _anim)
+		return
+	Fx.flash_damage(_anim)

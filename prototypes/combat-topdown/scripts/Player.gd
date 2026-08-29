@@ -105,6 +105,15 @@ signal died
 @onready var _anim: AnimatedSprite2D = $Visual
 @onready var _weapon_pivot: Node2D = $WeaponPivot
 @onready var _gun_sprite: Sprite2D = $WeaponPivot/Gun
+@onready var _camera: Camera2D = $Camera2D
+
+## --- Screen shake (jugo sin audio, ver STATUS.md) ---
+## `_shake_strength` decae linealmente a 0 en `_physics_process`; cada frame
+## se aplica un offset aleatorio a la cámara proporcional a la fuerza actual,
+## así que golpes seguidos se acumulan (clamp) en vez de cortarse entre sí.
+var _shake_strength: float = 0.0
+const SHAKE_DECAY: float = 18.0
+const SHAKE_MAX: float = 12.0
 
 func _ready() -> void:
 	health = max_health
@@ -172,6 +181,8 @@ func _physics_process(delta: float) -> void:
 	if shoot_allowed and Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
 		_shoot()
 		fire_cooldown = _get_effective_fire_rate()
+
+	_update_shake(delta)
 
 ## sur_t3_adrenaline: mientras la vida esté por debajo del 30% del máximo,
 ## +25% de velocidad y cadencia x0.8. Se calcula por-frame (no se aplica una
@@ -287,6 +298,22 @@ func _apply_dash_area_effect() -> void:
 				push_dir = Vector2.RIGHT
 			enemy.global_position += push_dir * dash_push_impulse
 
+## Aumenta la fuerza de shake actual (clamp a SHAKE_MAX en vez de sumar sin
+## límite, para que golpes/disparos seguidos no disparen un temblor gigante).
+func _start_shake(amount: float) -> void:
+	_shake_strength = min(_shake_strength + amount, SHAKE_MAX)
+
+func _update_shake(delta: float) -> void:
+	if _shake_strength <= 0.0:
+		if _camera.offset != Vector2.ZERO:
+			_camera.offset = Vector2.ZERO
+		return
+	_shake_strength = max(_shake_strength - SHAKE_DECAY * delta, 0.0)
+	_camera.offset = Vector2(
+		randf_range(-1.0, 1.0),
+		randf_range(-1.0, 1.0)
+	) * _shake_strength
+
 func _shoot() -> void:
 	match current_weapon:
 		Weapon.MELEE:
@@ -318,6 +345,7 @@ func _melee_attack() -> void:
 				push_dir = Vector2.RIGHT
 			enemy.global_position += push_dir * melee_knockback
 	_play_melee_lunge()
+	_start_shake(1.5)
 
 ## Feedback visual simple: el sprite del arma se adelanta y vuelve.
 func _play_melee_lunge() -> void:
@@ -360,6 +388,7 @@ func _shoot_ranged() -> void:
 	current_ammo -= 1
 	if current_ammo <= 0:
 		_start_reload()
+	_start_shake(1.5)
 
 func _start_reload() -> void:
 	if is_reloading:
@@ -387,6 +416,8 @@ func take_damage(amount: int) -> void:
 	if is_invulnerable:
 		return
 	health -= amount
+	Fx.flash_damage(_anim)
+	_start_shake(6.0)
 	if health <= 0 and has_second_wind_available:
 		has_second_wind_available = false
 		health = 1
@@ -395,4 +426,4 @@ func take_damage(amount: int) -> void:
 	health_changed.emit(health, max_health)
 	if health <= 0:
 		died.emit()
-		queue_free()
+		Fx.play_death(self, _anim)

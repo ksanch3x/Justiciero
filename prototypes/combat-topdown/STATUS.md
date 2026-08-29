@@ -113,16 +113,49 @@ diseño. Pesos de aparición por tipo suben gradualmente con la oleada (ver
 comentario en `Main._pick_enemy_scene()`).
 
 ### Escenario
+- **Arena cerrada**: área interior jugable **900x640**, centrada en el
+  origen (`x: [-450, 450]`, `y: [-320, 320]`). Antes era un área abierta de
+  2000x2000 sin bordes; se achicó a pedido del usuario para que se sienta
+  como un layout real (una sola sala cerrada, no salas múltiples conectadas
+  — eso queda para más adelante).
 - Fondo: `assets/generated/sand_floor_2000.png` — **generado con Python/PIL**
   (no está en Godot vía `texture_repeat`, causaba costuras visibles porque el
   primer tile elegido no era plano). Es una textura de 2000x2000 pre-tileada
   mezclando al azar 7 variantes de tile de arena (planas + moteadas) del
-  pack, para verse natural sin bandas repetidas. Si hace falta regenerarla,
-  el script de generación está en el historial de commits (no versionado
-  como script aparte, se ejecutó inline).
+  pack, para verse natural sin bandas repetidas. El `Sprite2D` de fondo ahora
+  acota su `region_rect` a `Rect2(0, 0, 900, 640)` en vez de mostrar la
+  textura completa. Si hace falta regenerarla, el script de generación está
+  en el historial de commits (no versionado como script aparte, se ejecutó
+  inline).
+- **Paredes** (`Main.tscn`, nodo `Walls`): 4 `StaticBody2D`
+  (`North`/`South`/`East`/`West`), grosor 40px, ubicados justo afuera del
+  área interior y extendidos en las esquinas para cerrar el borde sin
+  huecos. Visual: `ColorRect` con `Color(0.278431, 0.196078, 0.294118)` —
+  color RGB real (71, 50, 75) de `tile_0140.png`, confirmado con
+  `Image.getdata()` (uno de los tiles 100% planos ya identificados abajo).
+  Colisión: `RectangleShape2D`, `collision_layer=8` (misma capa que
+  `Props`), así que Player/Enemy/Runner/Spitter ya chocan contra ellas sin
+  tocar sus scripts (todos tienen `collision_mask=8`).
+- `SpawnPoint1..5` (`Main.tscn`) reposicionados a `±380/±260` (antes
+  `±400/±300`) para quedar cómodos dentro de la arena más chica, con margen
+  real respecto a las paredes.
+- `Camera2D` del jugador (`Player.tscn`) tiene límites
+  (`limit_left/right/top/bottom = ∓490/∓360`) ajustados a la arena + el
+  grosor de pared, para que nunca se vea el vacío fuera del área jugable.
 - Props sólidos (`Main.tscn`, nodo `Props`): 2 cactus, 2 rocas/huesos, 1
   formación rocosa — `StaticBody2D`, `collision_layer=8`. Bloquean a
-  jugador/enemigos (ambos tienen `collision_mask=8`).
+  jugador/enemigos (ambos tienen `collision_mask=8`). Posiciones sin cambios
+  (ya caían dentro del nuevo límite, sin quedar pegadas a una pared).
+- **Jugo visual sin audio** (`scripts/Fx.gd`, autoload): `flash_damage(sprite)`
+  (tween de `modulate` rojo-blanco al recibir daño) y
+  `play_death(node, sprite)` (tween de escala x1.4 + fade antes de
+  `queue_free()`), usados en `take_damage()` de Player/Enemy/Spitter (Runner
+  hereda de Enemy.gd sin overrides). Screen shake en `Player.gd`
+  (`_camera`/`_start_shake()`/`_update_shake()`, offset aleatorio con
+  decaimiento sobre `$Camera2D`): sutil al disparar/golpear, más notorio al
+  recibir daño. **Sin sonido** — el usuario pausó el sistema de audio
+  explícitamente ("los sonidos los cargamos después, los sintéticos son
+  horribles"); no hay `Sfx.gd` ni generación de `.wav`.
 - Iluminación: `CanvasModulate` oscurece la escena (`Color(0.16,0.16,0.22)`),
   + `PointLight2D` en jugador (ámbar), balas (blanco-amarillento chico) y
   enemigos (rojo tenue). Textura de luz generada (`assets/generated/light_glow.tres`,
@@ -192,6 +225,7 @@ necesitó knockback explícito — pueden superponerse del todo).
 - El pool de mejoras viejo ya no existe (reemplazado por el árbol), pero el
   árbol nuevo todavía no fue jugado/balanceado a fondo — falta feedback real
   de partidas largas.
-- Falta "jugo" (juice): sin sonido, sin screen shake, sin flash de daño al
-  jugador. Identificado como próxima prioridad de sensación de juego antes
-  que más contenido.
+- Audio pendiente **a propósito**: hay flash de daño, muerte con feedback
+  (escala+fade) y screen shake (`scripts/Fx.gd` + `Player.gd`), pero sin
+  sonido — el usuario pidió posponer `Sfx.gd`/síntesis de `.wav` para más
+  adelante ("los sintéticos son horribles").
