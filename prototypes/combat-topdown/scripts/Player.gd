@@ -15,6 +15,8 @@ signal health_changed(current: int, max: int)
 signal died
 
 @onready var _anim: AnimatedSprite2D = $Visual
+@onready var _weapon_pivot: Node2D = $WeaponPivot
+@onready var _gun_sprite: Sprite2D = $WeaponPivot/Gun
 
 func _ready() -> void:
 	health = max_health
@@ -41,6 +43,9 @@ func _physics_process(delta: float) -> void:
 	var aim_dir := get_global_mouse_position() - global_position
 	if abs(aim_dir.x) > 1.0:
 		_anim.flip_h = aim_dir.x < 0.0
+
+	_weapon_pivot.rotation = aim_dir.angle()
+	_gun_sprite.flip_v = aim_dir.x < 0.0
 
 	fire_cooldown -= delta
 	if Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
