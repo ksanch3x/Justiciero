@@ -18,6 +18,10 @@ extends Node2D
 const RUNNER_MIN_WAVE: int = 2
 const SPITTER_MIN_WAVE: int = 3
 
+## Cada MILESTONE_EVERY oleadas, en vez de mejoras normales se ofrece el
+## hito: conseguir un arma nueva o subir de nivel la equipada.
+const MILESTONE_EVERY: int = 5
+
 var wave_number: int = 0
 var enemies_to_spawn: int = 0
 var enemies_alive: int = 0
@@ -33,7 +37,13 @@ func _ready() -> void:
 	_player.health_changed.connect(_on_player_health_changed)
 	_player.died.connect(_on_player_died)
 	_upgrade_ui.chosen.connect(_on_upgrade_chosen)
-	_start_next_wave()
+
+	# Pantalla inicial: elegir arma cuerpo a cuerpo antes de la oleada 1.
+	# wave_number sigue en 0 mientras tanto (ver _update_hud, que muestra un
+	# texto fijo en ese estado en vez de "Oleada: 0").
+	_choosing_upgrade = true
+	_hud.text = "Elegí tu arma inicial"
+	_upgrade_ui.show_choices(_player, "weapon_pick")
 
 func _process(delta: float) -> void:
 	if _choosing_upgrade:
@@ -126,7 +136,8 @@ func _show_upgrade_selection() -> void:
 		_player.health = min(_player.max_health, _player.health + 1)
 		_player.health_changed.emit(_player.health, _player.max_health)
 	_choosing_upgrade = true
-	_upgrade_ui.show_choices(_player)
+	var mode := "milestone" if wave_number % MILESTONE_EVERY == 0 else "upgrade"
+	_upgrade_ui.show_choices(_player, mode)
 
 func _on_upgrade_chosen() -> void:
 	_choosing_upgrade = false

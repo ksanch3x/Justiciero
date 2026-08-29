@@ -19,45 +19,36 @@ extends CharacterBody2D
 @export var dash_push_impulse: float = 50.0
 @export var dash_damage: int = 1
 
-## --- Sistema de armas: melee inicial + SMG/Escopeta desbloqueables ---
-enum Weapon { MELEE, SMG, SHOTGUN }
-var current_weapon: int = Weapon.MELEE
+## --- Sistema de armas: roster de WeaponData.gd (5 armas x 2 niveles) ---
+## weapon_id == "" hasta que Main muestra la pantalla de elección inicial y el
+## jugador elige (ver riesgo #1 en STATUS.md/plan: _shoot()/_get_effective_
+## fire_rate() y _physics_process tienen guardas explícitas para este estado).
+var weapon_id: String = ""
+var weapon_level: int = 1
+## id de arma -> nivel máximo alcanzado (para no volver a ofrecer un arma ya
+## tenida al mismo nivel, y para saber si "ya tuvo" ranged en milestone_choices).
+var owned_weapons: Dictionary = {}
+## Stats VIVOS del arma equipada (los mutan las mejoras de la rama `off`).
+## Claves: damage/rate/range/knockback (melee) o damage/rate/mag/reload/
+## count/spread (ranged). Se recarga entera en cada equip_weapon().
+var wstats: Dictionary = {}
+## Mejoras de la rama `off` tomadas para el arma ACTUAL. Se vacía en cada
+## equip_weapon(): cambiar de arma (o subir de nivel) reinicia lo invertido
+## en ella — es la palanca que hace la elección del hito genuinamente tensa.
+var weapon_upgrades: Array[String] = []
 
-@export var melee_damage: int = 2
-@export var melee_range: float = 36.0
-@export var melee_attack_rate: float = 0.35
-## Empuje instantáneo (px) aplicado al enemigo golpeado, para que el jugador
-## no quede pegado intercambiando daño con el enemigo (ver _melee_attack).
-@export var melee_knockback: float = 46.0
-
-## La SMG reusa `fire_rate`/`bullet_damage`/`bullet_count` (las mismas
-## variables que hoy modifican off_t1_rate/off_t1_dmg/off_t2_burst/etc), así
-## que cualquier mejora tomada mientras el jugador todavía usa el cuchillo
-## queda guardada y ya viene aplicada en cuanto se consigue la SMG.
-@export var smg_mag_size: int = 20
-@export var smg_reload_time: float = 1.2
-
-## La escopeta tiene su propia cadencia (no la toca off_t1_rate) y sus
-## propios bonus de proyectiles/daño por disparo, sumados sobre
-## bullet_count/bullet_damage vigentes en el momento de disparar.
-@export var shotgun_fire_rate: float = 0.9
-@export var shotgun_mag_size: int = 6
-@export var shotgun_reload_time: float = 1.8
-@export var shotgun_bullet_count_bonus: int = 5
-@export var shotgun_damage_bonus: int = 1
-@export var shotgun_spread_deg: float = 28.0
-
-@export var melee_texture: Texture2D = preload("res://assets/desert-shooter-pack/Weapons/Tiles/tile_0008.png")
-@export var ranged_texture: Texture2D = preload("res://assets/desert-shooter-pack/Weapons/Tiles/tile_0000.png")
+## `fire_rate`/`bullet_spread_deg` ya no son la fuente de verdad ofensiva
+## (eso vive en wstats), pero quedan como @export de fallback para cuando
+## weapon_id == "" (pantalla inicial, antes de elegir arma) para no requerir
+## tocar Player.tscn ni dejar valores default sin uso declarado.
+@export var fire_rate: float = 0.2
+@export var bullet_spread_deg: float = 8.0
 
 var current_ammo: int = 0
 var current_mag_size: int = 0
 var is_reloading: bool = false
 var reload_time_left: float = 0.0
 var _gun_base_pos: Vector2 = Vector2.ZERO
-
-var bullet_damage: int = 1
-var bullet_count: int = 1
 
 var health: int
 var fire_cooldown: float = 0.0
@@ -177,7 +168,10 @@ func _physics_process(delta: float) -> void:
 			current_ammo = current_mag_size
 
 	fire_cooldown -= delta
-	var shoot_allowed := not is_dashing or can_shoot_while_dashing
+	# Guarda #3 contra weapon_id == "" (ver comentario en la declaración de
+	# weapon_id): sin arma elegida el bloque de disparo ni siquiera corre, así
+	# que fire_cooldown nunca se recarga con un valor degenerado.
+	var shoot_allowed := weapon_id != "" and (not is_dashing or can_shoot_while_dashing)
 	if shoot_allowed and Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
 		_shoot()
 		fire_cooldown = _get_effective_fire_rate()
@@ -196,53 +190,74 @@ func _get_effective_speed() -> float:
 	return speed
 
 func _get_effective_fire_rate() -> float:
-	var base_rate: float = fire_rate
-	match current_weapon:
-		Weapon.MELEE:
-			base_rate = melee_attack_rate
-		Weapon.SHOTGUN:
-			base_rate = shotgun_fire_rate
-		_:
-			base_rate = fire_rate
+	# Guarda #2 contra weapon_id == "": jamás devolver 0 acá. Si devolviera 0,
+	# fire_cooldown se recargaría en 0 cada frame y _shoot() (que ya corta
+	# temprano, guarda #1) terminaría siendo un no-op llamado a tasa de frame.
+	if weapon_id == "":
+		return 1.0
+	var base_rate: float = wstats.get("rate", fire_rate)
 	if _is_adrenaline_active():
 		return base_rate * 0.8
 	return base_rate
 
-## off_t1_smg: cambia el arma equipada de melee a SMG.
-func equip_smg() -> void:
-	current_weapon = Weapon.SMG
-	current_mag_size = smg_mag_size
-	current_ammo = smg_mag_size
+## Único camino para equipar un arma: tanto para conseguir una nueva como
+## para subir de nivel la actual (mismo id, level+1). Recarga wstats desde
+## WeaponData y VACÍA weapon_upgrades — ahí vive el "cambiar de arma reinicia
+## lo invertido en ella" que el hito necesita para ser una decisión real.
+func equip_weapon(id: String, level: int) -> void:
+	weapon_id = id
+	weapon_level = level
+	owned_weapons[id] = max(owned_weapons.get(id, 0), level)
+	wstats = WeaponData.base_stats(id, level)
+	weapon_upgrades.clear()
+
 	is_reloading = false
 	reload_time_left = 0.0
+	if WeaponData.is_ranged(id):
+		current_mag_size = int(wstats.get("mag", 0))
+		current_ammo = current_mag_size
+	else:
+		current_mag_size = 0
+		current_ammo = 0
+
 	_apply_weapon_visual()
 
-## off_t2_shotgun: cambia el arma equipada a la escopeta.
-func equip_shotgun() -> void:
-	current_weapon = Weapon.SHOTGUN
-	current_mag_size = shotgun_mag_size
-	current_ammo = shotgun_mag_size
-	is_reloading = false
-	reload_time_left = 0.0
-	_apply_weapon_visual()
+## Progreso combinado para requires/excludes de la rama `off`: las mejoras de
+## arma (weapon_upgrades, se vacían al cambiar de arma) más las de mov/sur
+## (taken_upgrades, persisten toda la corrida). Con esto el árbol `off` se
+## "reinicia" solo al cambiar de arma, sin lógica extra en UpgradeTree.
+func all_taken_upgrades() -> Array:
+	var combined: Array = []
+	combined.append_array(taken_upgrades)
+	combined.append_array(weapon_upgrades)
+	return combined
 
 func has_ranged_weapon() -> bool:
-	return current_weapon != Weapon.MELEE
+	return weapon_id != "" and WeaponData.is_ranged(weapon_id)
 
-## Actualiza el sprite de WeaponPivot/Gun según el arma equipada: el cuchillo
-## se muestra completo (sin recorte) y el arma a distancia reusa el recorte
-## de pistola ya existente en la escena.
+## Actualiza el sprite de WeaponPivot/Gun según el arma equipada. Sin arma
+## (weapon_id == "", pantalla inicial) el sprite queda oculto.
+##
+## Primera pasada CONSERVADORA para el melee (riesgo #3 del plan): cuchillo y
+## hacha están dibujados verticales en el pack y WeaponPivot rota apuntando
+## al mouse (+ flip_v en _physics_process), así que aplicarles el mismo
+## region_rect/scale recortado que a las armas a distancia se vería raro sin
+## además re-trabajar esa rotación. Por ahora el melee se muestra con la
+## textura completa, sin recorte, tal como ya funcionaba antes de este
+## cambio — afinar esto con el juego corriendo es trabajo pendiente.
 func _apply_weapon_visual() -> void:
-	match current_weapon:
-		Weapon.MELEE:
-			_gun_sprite.texture = melee_texture
-			_gun_sprite.region_enabled = false
-			_gun_sprite.scale = Vector2(1.0, 1.0)
-		_:
-			_gun_sprite.texture = ranged_texture
-			_gun_sprite.region_enabled = true
-			_gun_sprite.region_rect = Rect2(8, 8, 9, 8)
-			_gun_sprite.scale = Vector2(1.8, 1.8)
+	if weapon_id == "":
+		_gun_sprite.visible = false
+		return
+	_gun_sprite.visible = true
+	_gun_sprite.texture = WeaponData.icon_texture(weapon_id, weapon_level)
+	if WeaponData.is_ranged(weapon_id):
+		_gun_sprite.region_enabled = true
+		_gun_sprite.region_rect = WeaponData.icon_region(weapon_id, weapon_level)
+		_gun_sprite.scale = WeaponData.icon_scale(weapon_id, weapon_level)
+	else:
+		_gun_sprite.region_enabled = false
+		_gun_sprite.scale = Vector2(1.0, 1.0)
 
 func _start_dash() -> void:
 	var dir := _last_move_dir
@@ -315,24 +330,29 @@ func _update_shake(delta: float) -> void:
 	) * _shake_strength
 
 func _shoot() -> void:
-	match current_weapon:
-		Weapon.MELEE:
-			_melee_attack()
-		_:
-			_shoot_ranged()
+	# Guarda #1 contra weapon_id == "": sin arma elegida no hay nada que
+	# disparar/golpear (pantalla inicial, entre _ready() y la elección).
+	if weapon_id == "":
+		return
+	if WeaponData.is_ranged(weapon_id):
+		_shoot_ranged()
+	else:
+		_melee_attack()
 
-## Golpe cuerpo a cuerpo: daño instantáneo a todo enemigo dentro de
-## `melee_range` (sin chequeo de ángulo, simplificación deliberada). Sin
-## munición, cooldown propio vía melee_attack_rate/_get_effective_fire_rate.
+## Golpe cuerpo a cuerpo: daño instantáneo a todo enemigo dentro del alcance
+## vigente (sin chequeo de ángulo, simplificación deliberada). Sin munición,
+## cooldown propio vía wstats.rate/_get_effective_fire_rate.
 ##
 ## Jugador y enemigos no colisionan físicamente entre sí (ambos solo
 ## chocan con props), así que pueden superponerse del todo — sin empuje,
-## el rango de golpe del cuchillo (melee_range) queda prácticamente a la
-## misma distancia que el rango de contacto del enemigo, sin margen real
-## para golpear sin recibir daño. El empuje al conectar el golpe le da al
-## jugador un respiro tras cada hit en vez de quedar pegado intercambiando
-## daño (mismo patrón de empuje que _apply_dash_area_effect).
+## el rango de golpe quedaría prácticamente a la misma distancia que el
+## rango de contacto del enemigo, sin margen real para golpear sin recibir
+## daño. El empuje al conectar el golpe le da al jugador un respiro tras
+## cada hit (mismo patrón de empuje que _apply_dash_area_effect).
 func _melee_attack() -> void:
+	var melee_damage: int = wstats.get("damage", 1)
+	var melee_range: float = wstats.get("range", 40.0)
+	var melee_knockback: float = wstats.get("knockback", 40.0)
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		if not is_instance_valid(enemy):
 			continue
@@ -353,9 +373,9 @@ func _play_melee_lunge() -> void:
 	tween.tween_property(_gun_sprite, "position", _gun_base_pos + Vector2(10, 0), 0.05)
 	tween.tween_property(_gun_sprite, "position", _gun_base_pos, 0.1)
 
-## Disparo a distancia (SMG o Escopeta). Reusa la lógica de spread ya
-## existente en bullet_count/bullet_spread_deg; la escopeta suma sus propios
-## bonus de proyectiles/daño y usa su propio ángulo de dispersión.
+## Disparo a distancia (pistola/SMG/escopeta): todos los stats (daño,
+## cantidad de proyectiles, dispersión) vienen de wstats, ya sea el valor
+## base del arma o el vivo tras mejoras de la rama off (kind: "ranged").
 func _shoot_ranged() -> void:
 	if is_reloading:
 		return
@@ -364,13 +384,9 @@ func _shoot_ranged() -> void:
 		return
 
 	var base_dir := (get_global_mouse_position() - global_position).normalized()
-	var shot_count := bullet_count
-	var shot_damage := bullet_damage
-	var spread_deg := bullet_spread_deg
-	if current_weapon == Weapon.SHOTGUN:
-		shot_count += shotgun_bullet_count_bonus
-		shot_damage += shotgun_damage_bonus
-		spread_deg = shotgun_spread_deg
+	var shot_count: int = wstats.get("count", 1)
+	var shot_damage: int = wstats.get("damage", 1)
+	var spread_deg: float = wstats.get("spread", bullet_spread_deg)
 
 	for i in range(shot_count):
 		var offset := 0.0
@@ -394,7 +410,7 @@ func _start_reload() -> void:
 	if is_reloading:
 		return
 	is_reloading = true
-	reload_time_left = smg_reload_time if current_weapon == Weapon.SMG else shotgun_reload_time
+	reload_time_left = wstats.get("reload", 1.0)
 
 func heal_to_full() -> void:
 	health = max_health

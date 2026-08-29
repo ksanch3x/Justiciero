@@ -29,8 +29,9 @@ scripts/
   Spitter.gd      — enemigo a distancia, script propio (no hereda de Enemy.gd)
   Bullet.gd       — proyectil (Area2D), reusado por jugador y Spitter
   Main.gd         — spawner de oleadas, HUD, selección de tipo de enemigo por oleada
-  UpgradeTree.gd  — árbol de mejoras de la corrida (18 nodos, 3 ramas)
-  UpgradeUI.gd    — panel de selección de mejora entre oleadas
+  UpgradeTree.gd  — árbol de mejoras de la corrida (25 nodos, 3 ramas, filtrado por arma)
+  UpgradeUI.gd    — panel de selección (elección inicial / mejoras / hito de arma)
+  WeaponData.gd   — roster de armas (5 armas x 2 niveles), stats y sprites
 scenes/
   Player.tscn, Enemy.tscn, Runner.tscn, Spitter.tscn, Bullet.tscn, Main.tscn
 ```
@@ -47,43 +48,75 @@ scenes/
   `dash_cooldown=0.7s`, invulnerable durante el dash. No dispara mientras
   dashea (salvo mejora `mov_t3_phantom`).
 
-### Armas (jugador)
-Arranca con **melee** (cuchillo, sprite `Weapons/Tiles/tile_0008.png`), sin
-munición. Se consigue arma a distancia vía árbol de mejoras (no hay pickups
-en el mapa):
-- **Melee**: `melee_damage=2`, `melee_range=36px`, cooldown `0.35s`,
-  **empuja al enemigo golpeado `melee_knockback=46px`** (agregado porque sin
-  esto el jugador quedaba pegado intercambiando daño con el enemigo — ver
-  commit `9cefff3`).
-- **SMG** (nodo `off_t1_smg`, sin requisitos): cadencia/daño reusan
-  `fire_rate`/`bullet_damage`/`bullet_count` (las mismas variables que tocan
-  las mejoras de daño/cadencia — por eso mejoras tomadas en melee ya vienen
-  aplicadas al conseguir la SMG). Cargador `smg_mag_size=20`, recarga
-  automática al vaciarse, `smg_reload_time=1.2s`.
-- **Escopeta** (nodo `off_t2_shotgun`, requiere `off_t1_smg`): cadencia propia
-  `shotgun_fire_rate=0.9s`, cargador `shotgun_mag_size=6`,
-  `shotgun_reload_time=1.8s`, dispara en abanico (+5 proyectiles,
-  `shotgun_spread_deg=28°`, +1 daño).
+### Armas (jugador) — `scripts/WeaponData.gd`
+Sistema por niveles: **5 armas × 2 niveles** (naranja = nivel 1, turquesa =
+nivel 2 en `Weapons/Tiles/` — son las mismas 10 siluetas en 2 paletas, ver
+"Mapa de assets"). `Player.gd` ya NO tiene `enum Weapon` ni `@export` por
+arma — todo vive en `WeaponData.gd` (diccionario estático estilo
+`UpgradeTree.gd`) y en el estado vivo del jugador:
+
+```
+weapon_id: String        # "" hasta elegir en la pantalla inicial
+weapon_level: int
+owned_weapons: Dictionary       # id -> nivel máximo alcanzado
+wstats: Dictionary              # stats VIVOS del arma actual (mutados por mejoras)
+weapon_upgrades: Array[String]  # mejoras del arma actual, se vacían al cambiar de arma
+```
+
+`equip_weapon(id, level)` es el único camino (arma nueva o subir de nivel):
+recarga `wstats` desde `WeaponData.base_stats()` (que devuelve `.duplicate()`,
+nunca la referencia estática) y **vacía `weapon_upgrades`** — cambiar de arma
+o subir de nivel reinicia lo invertido en ella, a propósito (decisión de
+diseño: la elección del hito cuesta algo).
+
+- **Cuchillo** / **Hacha** (melee, sin munición): cuchillo rápido y seguro
+  (`damage 2→3`, `rate 0.30→0.26s`, `range 56→62px`, `knockback 46→52`),
+  hacha lenta pero pesada (`damage 5→7`, `rate 0.62→0.55s`, `range 72→80px`,
+  `knockback 78→90`). El rango del melee dejó margen real respecto al
+  `contact_range` del enemigo (24px) — antes (36px) casi no había margen.
+- **Pistola** → **SMG** → **Escopeta** (a distancia, con cargador y recarga
+  automática al vaciarse): la pistola queda intermedia (`mag 10→12`,
+  `rate 0.34→0.30s`), la SMG es la de cadencia altísima y cargador grande
+  (`mag 20→26`, `rate 0.14→0.12s`, poco daño por bala), la escopeta dispara
+  en abanico (`count 6→7`, `spread 26°`, cargador chico `6→8`).
+- El melee se muestra hoy **sin recorte** (primera pasada conservadora: el
+  arte está dibujado vertical y `WeaponPivot` rota apuntando al mouse +
+  `flip_v` — recortar el sprite ahí se vería raro sin retrabajar esa
+  rotación, queda pendiente de afinar con el juego corriendo). Las armas a
+  distancia sí usan `region_rect`/`scale` por nivel (calculados con
+  `Image.getbbox()` real, no estimados).
 - HUD muestra "Munición: X/Y" o "recargando..." cuando hay arma a distancia
   equipada (`Player.has_ranged_weapon()`).
 
-### Árbol de mejoras (`UpgradeTree.gd`)
-Reemplaza un pool plano por 18 nodos en 3 ramas, con `requires`/`excludes`
-(exclusión **solo dentro de la misma rama**, no hay exclusión cruzada — así
-lo pidió el usuario). Selección entre oleadas: hasta 3 nodos disponibles
-(prerrequisitos cumplidos, no excluidos), priorizando diversidad de ramas.
-Estado de progreso en `Player.taken_upgrades: Array[String]`.
+**Flujo de progresión**: pantalla inicial (elegí cuchillo o hacha, con sprite
++ nombre) antes de la oleada 1 → cada oleada normal ofrece mejoras del arma
+equipada → cada `MILESTONE_EVERY` oleadas (5) el panel ofrece en cambio
+**subir de nivel** el arma actual o **conseguir un arma nueva** siguiendo la
+progresión melee → pistola → SMG → escopeta (`WeaponData.milestone_choices()`).
 
-- **Ofensiva (`off`)**: cadencia/daño (t1) → Ráfaga vs Bala Pesada (t2,
-  exclusión mutua) → Cañón de Cristal vs Enjambre (t3, exclusión mutua,
-  ambos con trade-off real). Más los nodos de arma: `off_t1_smg` (t1, sin
-  requisitos) → `off_t2_shotgun` (t2, requiere SMG).
-- **Movilidad (`mov`)**: potencia el dash. Reflejos/Impulso (t1) → Dash
-  Encadenado vs Esquiva Blindada (t2, exclusión) → Fantasma vs Titán (t3,
-  exclusión, ambos con trade-off).
-- **Supervivencia (`sur`)**: Vitalidad/Recuperación (t1) → Piel Gruesa vs
-  Robo de Vida (t2, exclusión) → Último Aliento vs Adrenalina (t3, exclusión,
-  ambos con trade-off).
+### Árbol de mejoras (`UpgradeTree.gd`)
+25 nodos en 3 ramas, con `requires`/`excludes` (exclusión **solo dentro de
+la misma rama**) y ahora también `kind` (`""`/`"melee"`/`"ranged"`): los
+nodos de `off` solo se ofrecen si coinciden con el tipo de arma equipada, así
+la rama de armas y la de cadencia/daño ya no compiten por espacio ni se
+ofrecen mejoras que no hacen nada visible (antes `off_t1_rate`/`off_t1_dmg`
+aparecían aunque estuvieras con el cuchillo). Selección: hasta 3 nodos
+disponibles, priorizando diversidad de ramas. Progreso combinado vía
+`Player.all_taken_upgrades()` = `taken_upgrades` (mov/sur, persiste toda la
+corrida) + `weapon_upgrades` (arma actual, se vacía al cambiar de arma).
+
+- **Ofensiva (`off`)**, `kind: "ranged"`: Cadencia+/Daño+/Cargador Extendido
+  (t1) → Ráfaga vs Bala Pesada (t2, exclusión) → Cañón de Cristal vs Enjambre
+  (t3, exclusión, trade-off real). `kind: "melee"`: Filo Rápido/Filo Pesado
+  (t1) → Alcance vs Brutalidad (t2, exclusión) → Torbellino vs Verdugo (t3,
+  exclusión, trade-off). Las armas en sí (conseguir/subir de nivel) ya NO
+  salen de acá — salen de los hitos cada 5 oleadas.
+- **Movilidad (`mov`)**, `kind: ""` (siempre disponible): potencia el dash.
+  Reflejos/Impulso (t1) → Dash Encadenado vs Esquiva Blindada (t2, exclusión)
+  → Fantasma vs Titán (t3, exclusión, trade-off).
+- **Supervivencia (`sur`)**, `kind: ""`: Vitalidad/Recuperación (t1) → Piel
+  Gruesa vs Robo de Vida (t2, exclusión) → Último Aliento vs Adrenalina (t3,
+  exclusión, trade-off).
 
 La mitad de los nodos de tier 2-3 tienen costo explícito (no todo es buff
 puro) — decisión deliberada para mitigar el hallazgo de la auditoría de que
@@ -200,6 +233,14 @@ necesitó knockback explícito — pueden superponerse del todo).
    piso" en `Tiles/` son en realidad piezas de borde/transición, no relleno
    plano — verificar con Python/PIL (`set(im.getdata())`) antes de asumir que
    un tile es uniforme.
+7. **Estado "todavía no elegido" (`weapon_id == ""`)**: entre que el jugador
+   entra al árbol de escena y elige su arma en la pantalla inicial, `wstats`
+   está vacío. Cualquier código que lea stats de arma (`_shoot()`,
+   `_get_effective_fire_rate()`, el bloque de disparo en `_physics_process`)
+   tiene que cortar explícitamente en ese estado — si no, un `.get()` con
+   default en 0 puede hacer que `fire_cooldown` se recargue en 0 cada frame.
+   Mismo patrón de precaución que el resto de esta lista: nunca asumir que
+   un estado "todavía no inicializado" se comporta como el caso normal.
 
 ## Mapa de assets (`assets/desert-shooter-pack/`)
 
@@ -209,8 +250,11 @@ necesitó knockback explícito — pueden superponerse del todo).
   `tile_0011` que es una pose de golpe/muerte, no de caminata).
 - `Enemies/Tiles/`: mismo formato, 4 criaturas distintas (ver sección
   Enemigos arriba para el mapeo fila→tipo).
-- `Weapons/Tiles/`: grid 10x4 de 24x24. Filas 0-1 = íconos de armas (pistolas,
-  dagas/hachas en las últimas columnas). Filas 2-3 = íconos de UI (cruceta,
+- `Weapons/Tiles/`: grid 10x4 de 24x24. Filas 0-1 (tiles 0-19) = **10 armas
+  en 2 paletas** (naranja tiles 0-9 = nivel 1, turquesa tiles 10-19 = nivel
+  2 de la misma arma — ver `WeaponData.gd`): pistola (1/11), SMG (2/12),
+  escopeta (3/13), cuchillo (8/18), hacha (9/19); el resto (0,4-7) son otras
+  siluetas de arma sin usar todavía. Filas 2-3 = íconos de UI (cruceta,
   mira), no son armas pese al nombre de la carpeta.
 - `Tiles/`: 234 tiles 16x16, set de bloques/terreno variado (no es "arena"
   homogénea) — los índices usados para el piso están documentados en la
