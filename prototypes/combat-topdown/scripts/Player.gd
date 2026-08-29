@@ -26,6 +26,9 @@ var current_weapon: int = Weapon.MELEE
 @export var melee_damage: int = 2
 @export var melee_range: float = 36.0
 @export var melee_attack_rate: float = 0.35
+## Empuje instantáneo (px) aplicado al enemigo golpeado, para que el jugador
+## no quede pegado intercambiando daño con el enemigo (ver _melee_attack).
+@export var melee_knockback: float = 46.0
 
 ## La SMG reusa `fire_rate`/`bullet_damage`/`bullet_count` (las mismas
 ## variables que hoy modifican off_t1_rate/off_t1_dmg/off_t2_burst/etc), así
@@ -294,13 +297,26 @@ func _shoot() -> void:
 ## Golpe cuerpo a cuerpo: daño instantáneo a todo enemigo dentro de
 ## `melee_range` (sin chequeo de ángulo, simplificación deliberada). Sin
 ## munición, cooldown propio vía melee_attack_rate/_get_effective_fire_rate.
+##
+## Jugador y enemigos no colisionan físicamente entre sí (ambos solo
+## chocan con props), así que pueden superponerse del todo — sin empuje,
+## el rango de golpe del cuchillo (melee_range) queda prácticamente a la
+## misma distancia que el rango de contacto del enemigo, sin margen real
+## para golpear sin recibir daño. El empuje al conectar el golpe le da al
+## jugador un respiro tras cada hit en vez de quedar pegado intercambiando
+## daño (mismo patrón de empuje que _apply_dash_area_effect).
 func _melee_attack() -> void:
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		if not is_instance_valid(enemy):
 			continue
-		var dist: float = (enemy.global_position - global_position).length()
+		var to_enemy: Vector2 = enemy.global_position - global_position
+		var dist: float = to_enemy.length()
 		if dist <= melee_range and enemy.has_method("take_damage"):
 			enemy.take_damage(melee_damage)
+			var push_dir := to_enemy.normalized()
+			if push_dir.length() < 0.1:
+				push_dir = Vector2.RIGHT
+			enemy.global_position += push_dir * melee_knockback
 	_play_melee_lunge()
 
 ## Feedback visual simple: el sprite del arma se adelanta y vuelve.
