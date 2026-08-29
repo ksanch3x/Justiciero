@@ -1,7 +1,6 @@
 extends CharacterBody2D
 
 @export var speed: float = 220.0
-@export var fire_rate: float = 0.2
 @export var max_health: int = 5
 @export var bullet_scene: PackedScene = preload("res://scenes/Bullet.tscn")
 
@@ -10,7 +9,6 @@ extends CharacterBody2D
 @export var dash_duration: float = 0.15
 @export var dash_cooldown: float = 0.7
 @export var dash_invulnerable: bool = true
-@export var bullet_spread_deg: float = 8.0
 ## Radio (px) usado por las mejoras de dash que interactúan con enemigos
 ## cercanos al final del dash (empuje de mov_t2_armored, daño de mov_t3_juggernaut).
 @export var dash_impact_radius: float = 40.0
