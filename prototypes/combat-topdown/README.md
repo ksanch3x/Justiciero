@@ -1,53 +1,43 @@
 # Prototipo: Combate Top-Down / Shooter (Roguelite de oleadas)
 
-Prototipo de Godot 4 aislado para probar el "minuto de diversión" del combate a
-distancia + progresión roguelite dentro de una corrida (referencia GDD sección
-2.3, 2.4 y sección 0). No usa assets externos por defecto: formas de color
-(`Polygon2D`) generadas a mano, para poder iterar rápido sin depender de arte
-(el pack de Kenney ya está disponible en `assets/desert-shooter-pack/` para
-integrarlo después).
+Prototipo de Godot 4.3 aislado para probar el "minuto de diversión" del
+combate + progresión roguelite dentro de una corrida. Es su propio diseño,
+más simple y arcade que `games/justiciero/GDD.md` — no hace falta mantener
+fidelidad al GDD grande acá.
 
-## Qué prueba
+**Para el estado completo y detallado de qué está implementado (sistemas,
+valores numéricos, capas de colisión, mapa de assets, cuidados técnicos que
+ya causaron bugs), ver [`STATUS.md`](STATUS.md).** Este README es solo la
+puerta de entrada rápida.
 
-- Movimiento en 8 direcciones con `CharacterBody2D` (WASD).
-- Apuntado libre con el mouse (`look_at`) y disparo (click izquierdo) con cooldown
-  (`fire_rate`).
-- Enemigos (`Enemy.gd`) que persiguen al jugador y hacen daño de contacto con
-  cooldown propio.
-- Proyectiles (`Bullet.gd`) como `Area2D` con capas de colisión separadas
-  (jugador=1, enemigo=2, balas=4) para que las balas del jugador no lo golpeen
-  a él mismo.
-- **Oleadas (`Main.gd`)**: se generan enemigos en tandas; cuando se elimina toda
-  la oleada aparece una pantalla de selección de mejora (3 opciones al azar).
-  Al elegir, arranca la siguiente oleada, con más enemigos y más vida cada vez.
-- **Mejoras (`UpgradeTree.gd`)**: árbol de mejoras de UNA corrida (se resetea
-  con `reload_current_scene()`, no persiste) con 3 ramas — ofensiva, movilidad
-  y supervivencia —, cada una con tiers, requisitos y exclusiones dentro de la
-  misma rama. No confundir con el árbol permanente del GDD grande (sección 2.4).
-- HUD mínimo: oleada actual, vida y enemigos restantes. `R` reinicia la escena.
+## Qué tiene ahora mismo (resumen)
+
+- Movimiento 8 direcciones + dash con cooldown e invulnerabilidad.
+- Arma inicial melee (cuchillo), progresa a SMG y escopeta (con munición y
+  recarga) vía el árbol de mejoras.
+- Árbol de mejoras de la corrida (`UpgradeTree.gd`): 18 nodos en 3 ramas
+  (ofensiva, movilidad, supervivencia) con prerrequisitos y exclusión
+  mutua dentro de cada rama.
+- 3 tipos de enemigo (Grunt, Runner rápido, Spitter a distancia) con
+  escalado progresivo por oleada.
+- Escenario con piso de arena, props sólidos e iluminación (oscurecimiento
+  ambiental + luces puntuales en jugador/balas/enemigos).
 
 ## Cómo correrlo
 
-Abrir esta carpeta (`prototypes/combat-topdown/`) como proyecto en Godot 4.x y
-correr la escena `Main.tscn` (ya configurada como escena principal).
+Abrir esta carpeta (`prototypes/combat-topdown/`) como proyecto en Godot
+4.x y correr la escena `Main.tscn` (ya configurada como escena principal).
 
 ## Controles
 
 - Mover: WASD (o joystick izquierdo)
 - Apuntar: mouse
-- Disparar: click izquierdo (o gatillo del mando)
+- Disparar / atacar: click izquierdo (o gatillo del mando)
+- Dash: Espacio (o botón A del mando)
 - Reiniciar tras morir: R
 
 ## Qué se aprendió
 
-_(completar después de jugarlo — sensación del ritmo de disparo, si el
-movimiento en 8 direcciones se siente bien, si el daño de contacto es
-demasiado punitivo, etc.)_
-
-## Próximos pasos posibles
-
-- Agregar dash/esquiva con cooldown (ver GDD 2.3).
-- Munición finita para el disparo a distancia.
-- Diferenciar melee (silencioso, corto alcance) vs. ranged (ruidoso), aunque
-  el sistema de ruido/alerta no aplica todavía a este prototipo aislado.
-- Migrar lo aprendido (no el proyecto) a `games/justiciero/` cuando esté validado.
+_(completar jugándolo — sensación del ritmo de oleadas, si el árbol de
+mejoras genera decisiones interesantes, si el melee se siente bien con el
+knockback nuevo, etc.)_
