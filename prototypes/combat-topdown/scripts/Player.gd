@@ -19,6 +19,40 @@ extends CharacterBody2D
 @export var dash_push_impulse: float = 50.0
 @export var dash_damage: int = 1
 
+## --- Sistema de armas: melee inicial + SMG/Escopeta desbloqueables ---
+enum Weapon { MELEE, SMG, SHOTGUN }
+var current_weapon: int = Weapon.MELEE
+
+@export var melee_damage: int = 2
+@export var melee_range: float = 36.0
+@export var melee_attack_rate: float = 0.35
+
+## La SMG reusa `fire_rate`/`bullet_damage`/`bullet_count` (las mismas
+## variables que hoy modifican off_t1_rate/off_t1_dmg/off_t2_burst/etc), así
+## que cualquier mejora tomada mientras el jugador todavía usa el cuchillo
+## queda guardada y ya viene aplicada en cuanto se consigue la SMG.
+@export var smg_mag_size: int = 20
+@export var smg_reload_time: float = 1.2
+
+## La escopeta tiene su propia cadencia (no la toca off_t1_rate) y sus
+## propios bonus de proyectiles/daño por disparo, sumados sobre
+## bullet_count/bullet_damage vigentes en el momento de disparar.
+@export var shotgun_fire_rate: float = 0.9
+@export var shotgun_mag_size: int = 6
+@export var shotgun_reload_time: float = 1.8
+@export var shotgun_bullet_count_bonus: int = 5
+@export var shotgun_damage_bonus: int = 1
+@export var shotgun_spread_deg: float = 28.0
+
+@export var melee_texture: Texture2D = preload("res://assets/desert-shooter-pack/Weapons/Tiles/tile_0008.png")
+@export var ranged_texture: Texture2D = preload("res://assets/desert-shooter-pack/Weapons/Tiles/tile_0000.png")
+
+var current_ammo: int = 0
+var current_mag_size: int = 0
+var is_reloading: bool = false
+var reload_time_left: float = 0.0
+var _gun_base_pos: Vector2 = Vector2.ZERO
+
 var bullet_damage: int = 1
 var bullet_count: int = 1
 
@@ -72,6 +106,8 @@ signal died
 func _ready() -> void:
 	health = max_health
 	add_to_group("player")
+	_gun_base_pos = _gun_sprite.position
+	_apply_weapon_visual()
 
 func _physics_process(delta: float) -> void:
 	var input_vec := Vector2(
@@ -122,6 +158,12 @@ func _physics_process(delta: float) -> void:
 	_weapon_pivot.rotation = aim_dir.angle()
 	_gun_sprite.flip_v = aim_dir.x < 0.0
 
+	if is_reloading:
+		reload_time_left -= delta
+		if reload_time_left <= 0.0:
+			is_reloading = false
+			current_ammo = current_mag_size
+
 	fire_cooldown -= delta
 	var shoot_allowed := not is_dashing or can_shoot_while_dashing
 	if shoot_allowed and Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
@@ -140,9 +182,53 @@ func _get_effective_speed() -> float:
 	return speed
 
 func _get_effective_fire_rate() -> float:
+	var base_rate: float = fire_rate
+	match current_weapon:
+		Weapon.MELEE:
+			base_rate = melee_attack_rate
+		Weapon.SHOTGUN:
+			base_rate = shotgun_fire_rate
+		_:
+			base_rate = fire_rate
 	if _is_adrenaline_active():
-		return fire_rate * 0.8
-	return fire_rate
+		return base_rate * 0.8
+	return base_rate
+
+## off_t1_smg: cambia el arma equipada de melee a SMG.
+func equip_smg() -> void:
+	current_weapon = Weapon.SMG
+	current_mag_size = smg_mag_size
+	current_ammo = smg_mag_size
+	is_reloading = false
+	reload_time_left = 0.0
+	_apply_weapon_visual()
+
+## off_t2_shotgun: cambia el arma equipada a la escopeta.
+func equip_shotgun() -> void:
+	current_weapon = Weapon.SHOTGUN
+	current_mag_size = shotgun_mag_size
+	current_ammo = shotgun_mag_size
+	is_reloading = false
+	reload_time_left = 0.0
+	_apply_weapon_visual()
+
+func has_ranged_weapon() -> bool:
+	return current_weapon != Weapon.MELEE
+
+## Actualiza el sprite de WeaponPivot/Gun según el arma equipada: el cuchillo
+## se muestra completo (sin recorte) y el arma a distancia reusa el recorte
+## de pistola ya existente en la escena.
+func _apply_weapon_visual() -> void:
+	match current_weapon:
+		Weapon.MELEE:
+			_gun_sprite.texture = melee_texture
+			_gun_sprite.region_enabled = false
+			_gun_sprite.scale = Vector2(1.0, 1.0)
+		_:
+			_gun_sprite.texture = ranged_texture
+			_gun_sprite.region_enabled = true
+			_gun_sprite.region_rect = Rect2(8, 8, 9, 8)
+			_gun_sprite.scale = Vector2(1.8, 1.8)
 
 func _start_dash() -> void:
 	var dir := _last_move_dir
@@ -199,20 +285,71 @@ func _apply_dash_area_effect() -> void:
 			enemy.global_position += push_dir * dash_push_impulse
 
 func _shoot() -> void:
-	var base_dir := (get_global_mouse_position() - global_position).normalized()
+	match current_weapon:
+		Weapon.MELEE:
+			_melee_attack()
+		_:
+			_shoot_ranged()
 
-	for i in range(bullet_count):
+## Golpe cuerpo a cuerpo: daño instantáneo a todo enemigo dentro de
+## `melee_range` (sin chequeo de ángulo, simplificación deliberada). Sin
+## munición, cooldown propio vía melee_attack_rate/_get_effective_fire_rate.
+func _melee_attack() -> void:
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if not is_instance_valid(enemy):
+			continue
+		var dist: float = (enemy.global_position - global_position).length()
+		if dist <= melee_range and enemy.has_method("take_damage"):
+			enemy.take_damage(melee_damage)
+	_play_melee_lunge()
+
+## Feedback visual simple: el sprite del arma se adelanta y vuelve.
+func _play_melee_lunge() -> void:
+	var tween := create_tween()
+	tween.tween_property(_gun_sprite, "position", _gun_base_pos + Vector2(10, 0), 0.05)
+	tween.tween_property(_gun_sprite, "position", _gun_base_pos, 0.1)
+
+## Disparo a distancia (SMG o Escopeta). Reusa la lógica de spread ya
+## existente en bullet_count/bullet_spread_deg; la escopeta suma sus propios
+## bonus de proyectiles/daño y usa su propio ángulo de dispersión.
+func _shoot_ranged() -> void:
+	if is_reloading:
+		return
+	if current_ammo <= 0:
+		_start_reload()
+		return
+
+	var base_dir := (get_global_mouse_position() - global_position).normalized()
+	var shot_count := bullet_count
+	var shot_damage := bullet_damage
+	var spread_deg := bullet_spread_deg
+	if current_weapon == Weapon.SHOTGUN:
+		shot_count += shotgun_bullet_count_bonus
+		shot_damage += shotgun_damage_bonus
+		spread_deg = shotgun_spread_deg
+
+	for i in range(shot_count):
 		var offset := 0.0
-		if bullet_count > 1:
-			offset = deg_to_rad(bullet_spread_deg) * (i - float(bullet_count - 1) / 2.0)
+		if shot_count > 1:
+			offset = deg_to_rad(spread_deg) * (i - float(shot_count - 1) / 2.0)
 		var dir := base_dir.rotated(offset)
 
 		var bullet := bullet_scene.instantiate()
 		bullet.direction = dir
 		bullet.shooter = self
-		bullet.damage = bullet_damage
+		bullet.damage = shot_damage
 		get_tree().current_scene.add_child(bullet)
 		bullet.global_position = global_position
+
+	current_ammo -= 1
+	if current_ammo <= 0:
+		_start_reload()
+
+func _start_reload() -> void:
+	if is_reloading:
+		return
+	is_reloading = true
+	reload_time_left = smg_reload_time if current_weapon == Weapon.SMG else shotgun_reload_time
 
 func heal_to_full() -> void:
 	health = max_health

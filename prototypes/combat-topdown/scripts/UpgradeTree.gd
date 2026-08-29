@@ -37,6 +37,18 @@ static func _apply_off_t3_swarm(p: CharacterBody2D) -> void:
 	p.bullet_count += 2
 	p.bullet_spread_deg *= 1.5
 
+## off_t1_smg: puerta de entrada al disparo a distancia. Sin requisitos
+## (debe poder aparecer temprano). Mientras el jugador siga con el cuchillo,
+## off_t1_rate/off_t1_dmg (y el resto de la rama off) ya quedan guardados en
+## fire_rate/bullet_damage y se notan apenas se consigue la SMG.
+static func _apply_off_t1_smg(p: CharacterBody2D) -> void:
+	p.equip_smg()
+
+## off_t2_shotgun: requiere haber tomado off_t1_smg (tenés que tener ya un
+## arma a distancia para tener sentido "mejorarla" a escopeta).
+static func _apply_off_t2_shotgun(p: CharacterBody2D) -> void:
+	p.equip_shotgun()
+
 # ---------------------------------------------------------------------------
 # Rama MOVILIDAD
 # ---------------------------------------------------------------------------
@@ -126,6 +138,12 @@ static func get_all() -> Array:
 		{"id": "off_t3_swarm", "name": "Enjambre", "desc": "+2 proyectiles, +50% dispersión de disparo",
 			"apply": Callable(UpgradeTree, "_apply_off_t3_swarm"),
 			"branch": "off", "tier": 3, "requires": ["off_t2_burst"], "excludes": ["off_t3_glasscannon"]},
+		{"id": "off_t1_smg", "name": "Conseguir SMG", "desc": "cambia el cuchillo por una SMG: cadencia alta, cargador de munición",
+			"apply": Callable(UpgradeTree, "_apply_off_t1_smg"),
+			"branch": "off", "tier": 1, "requires": [], "excludes": []},
+		{"id": "off_t2_shotgun", "name": "Conseguir Escopeta", "desc": "cambia el arma a distancia por una escopeta: cargador chico, abanico de proyectiles",
+			"apply": Callable(UpgradeTree, "_apply_off_t2_shotgun"),
+			"branch": "off", "tier": 2, "requires": ["off_t1_smg"], "excludes": []},
 
 		{"id": "mov_t1_cd", "name": "Reflejos", "desc": "cooldown de dash x0.75",
 			"apply": Callable(UpgradeTree, "_apply_mov_t1_cd"),

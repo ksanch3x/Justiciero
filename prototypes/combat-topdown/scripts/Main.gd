@@ -150,4 +150,12 @@ func _update_hud() -> void:
 		hp = _player.health
 		max_hp = _player.max_health
 	var alive_or_pending := enemies_alive + enemies_to_spawn
-	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d" % [wave_number, hp, max_hp, alive_or_pending]
+
+	var ammo_text := ""
+	if is_instance_valid(_player) and _player.has_ranged_weapon():
+		if _player.is_reloading:
+			ammo_text = "   Munición: recargando..."
+		else:
+			ammo_text = "   Munición: %d/%d" % [_player.current_ammo, _player.current_mag_size]
+
+	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text]
