@@ -12,6 +12,8 @@ var _attack_timer: float = 0.0
 
 signal died
 
+@onready var _anim: AnimatedSprite2D = $Visual
+
 func _ready() -> void:
 	health = max_health
 	add_to_group("enemy")
@@ -25,7 +27,9 @@ func _physics_process(delta: float) -> void:
 	var to_player := _player.global_position - global_position
 	velocity = to_player.normalized() * speed
 	move_and_slide()
-	look_at(_player.global_position)
+
+	if abs(to_player.x) > 1.0:
+		_anim.flip_h = to_player.x < 0.0
 
 	_attack_timer -= delta
 	if to_player.length() <= contact_range and _attack_timer <= 0.0:

@@ -38,7 +38,9 @@ func _physics_process(delta: float) -> void:
 		_anim.stop()
 		_anim.frame = 0
 
-	look_at(get_global_mouse_position())
+	var aim_dir := get_global_mouse_position() - global_position
+	if abs(aim_dir.x) > 1.0:
+		_anim.flip_h = aim_dir.x < 0.0
 
 	fire_cooldown -= delta
 	if Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
