@@ -81,7 +81,7 @@ func _pick_enemy_scene() -> PackedScene:
 		return enemy_scene
 
 	var grunt_weight := 70
-	var runner_weight := 30 if runner_enabled else 0
+	var runner_weight: int = 30 if runner_enabled else 0
 	var spitter_weight := 0
 	if spitter_enabled:
 		if wave_number >= 5:
@@ -136,7 +136,7 @@ func _show_upgrade_selection() -> void:
 		_player.health = min(_player.max_health, _player.health + 1)
 		_player.health_changed.emit(_player.health, _player.max_health)
 	_choosing_upgrade = true
-	var mode := "milestone" if wave_number % MILESTONE_EVERY == 0 else "upgrade"
+	var mode: String = "milestone" if wave_number % MILESTONE_EVERY == 0 else "upgrade"
 	_upgrade_ui.show_choices(_player, mode)
 
 func _on_upgrade_chosen() -> void:

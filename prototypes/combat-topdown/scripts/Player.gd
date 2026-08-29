@@ -169,7 +169,7 @@ func _physics_process(delta: float) -> void:
 	# Guarda #3 contra weapon_id == "" (ver comentario en la declaración de
 	# weapon_id): sin arma elegida el bloque de disparo ni siquiera corre, así
 	# que fire_cooldown nunca se recarga con un valor degenerado.
-	var shoot_allowed := weapon_id != "" and (not is_dashing or can_shoot_while_dashing)
+	var shoot_allowed: bool = weapon_id != "" and (not is_dashing or can_shoot_while_dashing)
 	if shoot_allowed and Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
 		_shoot()
 		fire_cooldown = _get_effective_fire_rate()

@@ -241,6 +241,14 @@ necesitó knockback explícito — pueden superponerse del todo).
    default en 0 puede hacer que `fire_cooldown` se recargue en 0 cada frame.
    Mismo patrón de precaución que el resto de esta lista: nunca asumir que
    un estado "todavía no inicializado" se comporta como el caso normal.
+8. **`var x := <ternario o and/or>`**: el análisis estático de GDScript puede
+   fallar en inferir el tipo cuando el lado derecho de `:=` es un operador
+   ternario (`a if cond else b`) o una expresión booleana con `and`/`or`
+   mezclada con llamadas a método (`Cannot infer the type of "x" variable`).
+   Pasó más de una vez en este proyecto (`Main._update_hud`, luego
+   `WeaponData.milestone_choices`, `Player._shoot`). Cuando el valor no sea
+   un literal simple de un solo tipo, declarar el tipo explícito
+   (`var x: bool = ...`) en vez de confiar en `:=`.
 
 ## Mapa de assets (`assets/desert-shooter-pack/`)
 

@@ -133,7 +133,7 @@ static func weapon_name(id: String) -> String:
 
 ## Nombre + nivel en números romanos simples (solo hay 2 niveles).
 static func display_name(id: String, level: int) -> String:
-	var roman := "I" if level <= 1 else "II"
+	var roman: String = "I" if level <= 1 else "II"
 	return "%s %s" % [weapon_name(id), roman]
 
 static func description(id: String) -> String:
@@ -213,7 +213,7 @@ static func milestone_choices(player) -> Array:
 			var ranged_id: String = RANGED_PROGRESSION[i]
 			if player.owned_weapons.has(ranged_id):
 				continue
-			var prev_owned := i == 0 or player.owned_weapons.has(RANGED_PROGRESSION[i - 1])
+			var prev_owned: bool = (i == 0) or player.owned_weapons.has(RANGED_PROGRESSION[i - 1])
 			if prev_owned:
 				new_weapon_ids.append(ranged_id)
 				break
