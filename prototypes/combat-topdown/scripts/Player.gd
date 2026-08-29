@@ -14,6 +14,8 @@ var fire_cooldown: float = 0.0
 signal health_changed(current: int, max: int)
 signal died
 
+@onready var _anim: AnimatedSprite2D = $Visual
+
 func _ready() -> void:
 	health = max_health
 	add_to_group("player")
@@ -28,6 +30,13 @@ func _physics_process(delta: float) -> void:
 
 	velocity = input_vec * speed
 	move_and_slide()
+
+	if input_vec.length() > 0.1:
+		if not _anim.is_playing():
+			_anim.play("walk")
+	else:
+		_anim.stop()
+		_anim.frame = 0
 
 	look_at(get_global_mouse_position())
 
