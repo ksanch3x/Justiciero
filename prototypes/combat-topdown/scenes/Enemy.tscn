@@ -46,5 +46,5 @@ shape = SubResource("CircleShape2D_enemy")
 [node name="Glow" type="PointLight2D" parent="."]
 texture = ExtResource("5")
 color = Color(1, 0.2, 0.15, 1)
-energy = 0.5
-texture_scale = 0.9
+energy = 0.7
+texture_scale = 0.3

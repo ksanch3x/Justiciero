@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Enemy.tscn" id="3"]
 [ext_resource type="Script" path="res://scripts/UpgradeUI.gd" id="4"]
-[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0042.png" id="5"]
+[ext_resource type="Texture2D" path="res://assets/generated/sand_floor_2000.png" id="5"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0062.png" id="6"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0063.png" id="7"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0082.png" id="8"]
@@ -20,11 +20,8 @@ script = ExtResource("1")
 [node name="Background" type="Sprite2D" parent="."]
 position = Vector2(-1000, -1000)
 centered = false
-texture_repeat = 2
 texture_filter = 1
 texture = ExtResource("5")
-region_enabled = true
-region_rect = Rect2(0, 0, 2000, 2000)
 
 [node name="CanvasModulate" type="CanvasModulate" parent="."]
 color = Color(0.16, 0.16, 0.22, 1)
