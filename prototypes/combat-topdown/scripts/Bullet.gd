@@ -20,6 +20,8 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if body.has_method("take_damage"):
 		body.take_damage(damage)
+		if shooter != null and shooter.has_method("_on_bullet_hit"):
+			shooter._on_bullet_hit()
 	queue_free()
 
 func _expire() -> void:

@@ -20,10 +20,10 @@ integrarlo después).
 - **Oleadas (`Main.gd`)**: se generan enemigos en tandas; cuando se elimina toda
   la oleada aparece una pantalla de selección de mejora (3 opciones al azar).
   Al elegir, arranca la siguiente oleada, con más enemigos y más vida cada vez.
-- **Mejoras (`UpgradePool.gd`)**: +velocidad, +cadencia de disparo, +vida
-  máxima, +proyectil extra, +daño de bala. Pensado como base para mapear luego
-  contra las ramas del Árbol de Habilidades del GDD (sección 2.4), aunque acá
-  son mejoras de una sola corrida, no permanentes.
+- **Mejoras (`UpgradeTree.gd`)**: árbol de mejoras de UNA corrida (se resetea
+  con `reload_current_scene()`, no persiste) con 3 ramas — ofensiva, movilidad
+  y supervivencia —, cada una con tiers, requisitos y exclusiones dentro de la
+  misma rama. No confundir con el árbol permanente del GDD grande (sección 2.4).
 - HUD mínimo: oleada actual, vida y enemigos restantes. `R` reinicia la escena.
 
 ## Cómo correrlo

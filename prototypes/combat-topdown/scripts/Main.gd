@@ -63,6 +63,9 @@ func _on_enemy_died() -> void:
 	enemies_alive -= 1
 
 func _show_upgrade_selection() -> void:
+	if _player.has_wave_regen and _player.health < _player.max_health:
+		_player.health = min(_player.max_health, _player.health + 1)
+		_player.health_changed.emit(_player.health, _player.max_health)
 	_choosing_upgrade = true
 	_upgrade_ui.show_choices(_player)
 
