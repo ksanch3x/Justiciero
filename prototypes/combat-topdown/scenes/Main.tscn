@@ -1,10 +1,18 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/Main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Enemy.tscn" id="3"]
 [ext_resource type="Script" path="res://scripts/UpgradeUI.gd" id="4"]
 [ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0042.png" id="5"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0062.png" id="6"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0063.png" id="7"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0082.png" id="8"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0083.png" id="9"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0084.png" id="10"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_prop"]
+radius = 7.0
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -37,6 +45,68 @@ position = Vector2(400, 300)
 
 [node name="SpawnPoint5" type="Node2D" parent="SpawnPoints"]
 position = Vector2(0, -400)
+
+[node name="Props" type="Node2D" parent="."]
+
+[node name="Cactus1" type="StaticBody2D" parent="Props"]
+position = Vector2(180, 90)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Cactus1"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("6")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Cactus1"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="Cactus2" type="StaticBody2D" parent="Props"]
+position = Vector2(-220, -140)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Cactus2"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("7")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Cactus2"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="Bones1" type="StaticBody2D" parent="Props"]
+position = Vector2(260, -220)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Bones1"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("8")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Bones1"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="Bones2" type="StaticBody2D" parent="Props"]
+position = Vector2(-260, 180)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Bones2"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("9")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Bones2"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="RockFormation" type="StaticBody2D" parent="Props"]
+position = Vector2(60, 240)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/RockFormation"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("10")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/RockFormation"]
+shape = SubResource("CircleShape2D_prop")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
