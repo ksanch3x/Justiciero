@@ -18,6 +18,7 @@ func _ready() -> void:
 	health = max_health
 	add_to_group("enemy")
 	_player = get_tree().get_first_node_in_group("player")
+	_anim.play("walk")
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(_player):
