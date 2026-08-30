@@ -345,20 +345,14 @@ func _apply_dash_area_effect() -> void:
 				push_dir = Vector2.RIGHT
 			enemy.global_position = _clamp_to_arena(enemy.global_position + push_dir * dash_push_impulse)
 
-## Interior jugable real: arena 900x640 centrada en (0,0) menos el grosor
-## de las 4 paredes (40px, ver Main.WALL_THICKNESS) y un margen chico extra
-## — el empuje de dash/melee movía `global_position` directo (sin
+## El empuje de dash/melee mueve `global_position` directo (sin
 ## move_and_slide, así que sin colisión) y podía tirar enemigos AFUERA de
-## las paredes si el golpe conectaba cerca del borde. Bug reportado
-## jugando: "lancé a algunos por fuera del marco de colisión".
-const ARENA_MIN: Vector2 = Vector2(-400, -270)
-const ARENA_MAX: Vector2 = Vector2(400, 270)
-
+## las paredes si el golpe conectaba cerca del borde — bug reportado
+## jugando: "lancé a algunos por fuera del marco de colisión". El límite
+## sale del autoload Arena (área de la sala ACTIVA) en vez de una constante
+## local: las salas ya no son todas el mismo rectángulo (ver RoomData.gd).
 func _clamp_to_arena(pos: Vector2) -> Vector2:
-	return Vector2(
-		clampf(pos.x, ARENA_MIN.x, ARENA_MAX.x),
-		clampf(pos.y, ARENA_MIN.y, ARENA_MAX.y)
-	)
+	return Arena.clamp_point(pos)
 
 ## Aumenta la fuerza de shake actual (clamp a SHAKE_MAX en vez de sumar sin
 ## límite, para que golpes/disparos seguidos no disparen un temblor gigante).

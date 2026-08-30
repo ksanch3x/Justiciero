@@ -171,19 +171,16 @@ func _process_patrol() -> void:
 		return
 	velocity = to_target.normalized() * patrol_speed
 
-## Clampeado dentro del interior jugable — ver comentario largo en
-## Enemy.gd (bug: patrulla podía apuntar detrás de una pared y quedar
-## atascado empujando contra ella).
-const PATROL_ARENA_MIN: Vector2 = Vector2(-400, -270)
-const PATROL_ARENA_MAX: Vector2 = Vector2(400, 270)
-
+## El punto de patrulla se clampea al área jugable de la sala ACTIVA
+## (Arena.clamp_point, autoload) — sin esto un spawn cerca de un borde
+## podía elegir un destino detrás de la pared y el bot quedaba
+## empujando contra ella sin llegar nunca. Antes el clamp era una
+## constante local con el rectángulo viejo; ahora las salas tienen
+## formas y tamaños distintos (ver RoomData.gd), así que los límites
+## los publica Main en cada transición.
 func _pick_patrol_target() -> void:
 	var offset := Vector2(randf_range(-patrol_radius, patrol_radius), randf_range(-patrol_radius, patrol_radius))
-	var target: Vector2 = _spawn_position + offset
-	_patrol_target = Vector2(
-		clampf(target.x, PATROL_ARENA_MIN.x, PATROL_ARENA_MAX.x),
-		clampf(target.y, PATROL_ARENA_MIN.y, PATROL_ARENA_MAX.y)
-	)
+	_patrol_target = Arena.clamp_point(_spawn_position + offset)
 
 ## Busca el Policía vivo más cercano dentro de faction_detection_range.
 func _find_nearby_rival() -> Node2D:

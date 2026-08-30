@@ -50,16 +50,27 @@ var waves_in_room: int = 0
 var _door_open: bool = false
 var _boss_mode: bool = false
 var _boss: CharacterBody2D = null
+## Lados con la puerta ya abierta en la sala activa. Los muros se
+## regeneran enteros desde cero (ver _rebuild_walls()) en vez de
+## deshabilitar/restaurar nodos fijos, así que el vano es simplemente un
+## tramo que no se genera.
+var _open_door_sides: Array[String] = []
 
 const PROP_NAMES: Array[String] = ["Cactus1", "Cactus2", "Bones1", "Bones2", "RockFormation"]
 const DEFAULT_TINT: Color = Color(0.16, 0.16, 0.22, 1)
 const WALL_THICKNESS: float = 40.0
-const WALL_HEIGHT: float = 720.0
 const WALL_COLOR: Color = Color(0.278431, 0.196078, 0.294118, 1)
 ## Mitad de la altura del vano de la puerta (vano total = 140px, cómodo
 ## para cruzar sin rozar los segmentos de pared restantes).
 const DOOR_GAP_HALF_HEIGHT: float = 70.0
-const SIDE_TO_WALL: Dictionary = {"east": "East", "west": "West"}
+## Tamaño de celda de la grilla sobre la que se recorre el borde de la
+## unión de rects para generar los muros (ver _build_walls_for_room()).
+## Mismo valor que CELL en tools/validate_rooms.py — si cambia uno hay que
+## cambiar el otro, o el validador deja de reflejar la geometría real.
+const WALL_CELL: float = 20.0
+## Margen extra entre el borde jugable y el límite de la cámara, para que
+## nunca se vea el vacío más allá del muro.
+const CAMERA_MARGIN: float = 60.0
 
 ## --- UI kit del pack (assets/desert-shooter-pack/UI/, 198 tiles 16x16,
 ## nunca usado hasta el cierre del demo v2). Índices verificados armando un
@@ -102,7 +113,7 @@ var _boss_bar_full_width: float = 0.0
 
 @onready var _player: CharacterBody2D = $Player
 @onready var _hud: Label = $HUD/Label
-@onready var _spawn_points: Node2D = $SpawnPoints
+@onready var _background: Sprite2D = $Background
 @onready var _upgrade_ui: CanvasLayer = $UpgradeUI
 @onready var _walls: Node2D = $Walls
 @onready var _props: Node2D = $Props
@@ -118,7 +129,9 @@ func _ready() -> void:
 	# nueva, a diferencia de una futura Notoriedad persistente.
 	FactionManager.reset()
 
-	_apply_room(RoomData.get_room(current_room_id))
+	var first_room: Dictionary = RoomData.get_room(current_room_id)
+	_apply_room(first_room)
+	_player.global_position = first_room["entry"]
 	_spawn_police()
 	_spawn_criminals()
 
@@ -208,10 +221,13 @@ func _pick_enemy_scene() -> PackedScene:
 	return spitter_scene
 
 func _spawn_enemy() -> void:
-	var points := _spawn_points.get_children()
+	# Los puntos vienen de la sala activa (RoomData `spawns`), no de un
+	# nodo fijo de Main.tscn: con salas de forma distinta, los 5 puntos
+	# fijos del rectángulo viejo caían dentro de muros o fuera del área.
+	var points: Array = RoomData.get_room(current_room_id)["spawns"]
 	if points.is_empty():
 		return
-	var point: Node2D = points[randi() % points.size()]
+	var point: Vector2 = points[randi() % points.size()]
 
 	var scene := _pick_enemy_scene()
 	var enemy := scene.instantiate()
@@ -230,7 +246,7 @@ func _spawn_enemy() -> void:
 	enemy.died.connect(_on_enemy_died)
 
 	add_child(enemy)
-	enemy.global_position = point.global_position
+	enemy.global_position = point
 	enemies_alive += 1
 
 func _on_enemy_died() -> void:
@@ -252,7 +268,8 @@ func _spawn_police() -> void:
 	# Acercada de (-350,-260): con patrol_radius=170 (Police.gd) esto
 	# solapa la zona de patrulla de los criminales de abajo — antes estaban
 	# tan lejos que nunca llegaban a cruzarse (bug: "no veo que
-	# interactúen con el resto").
+	# interactúen con el resto"). Tiene que caer dentro de la sala 1
+	# (validado por tools/validate_rooms.py junto al resto de los puntos).
 	police.global_position = Vector2(-100, -120)
 
 ## Dos criminales patrullando desde el arranque — junto con el policía de
@@ -263,7 +280,10 @@ func _spawn_police() -> void:
 ## acercadas al policía (ver comentario en _spawn_police()) para que sus
 ## radios de patrulla (170px c/u) realmente se solapen.
 func _spawn_criminals() -> void:
-	var positions := [Vector2(140, -100), Vector2(-20, 170)]
+	# Ambas dentro de la sala 1 (la de (140,-100) de antes caía fuera de la
+	# forma nueva: x=140 solo existe en el pasillo este, que va de y=-60 a
+	# y=60). Validado por tools/validate_rooms.py.
+	var positions := [Vector2(60, -180), Vector2(-20, 170)]
 	for pos in positions:
 		var criminal := criminal_scene.instantiate()
 		add_child(criminal)
@@ -290,39 +310,50 @@ func _on_upgrade_chosen() -> void:
 ## compite con _show_upgrade_selection() — una u otra, nunca ambas.
 func _open_room_doors(room: Dictionary) -> void:
 	var doors: Dictionary = room["doors"]
+	if doors.is_empty():
+		return
 	if doors.size() > 1:
 		_choosing_upgrade = true
 		_upgrade_ui.show_choices(_player, "door_pick", doors)
 	else:
 		var side: String = doors.keys()[0]
-		_open_door(side, String(doors[side]))
+		_open_door(side, String(doors[side]["to"]))
 
 func _on_door_chosen(side: String) -> void:
 	_choosing_upgrade = false
 	var room: Dictionary = RoomData.get_room(current_room_id)
 	var doors: Dictionary = room["doors"]
-	_open_door(side, String(doors[side]))
+	_open_door(side, String(doors[side]["to"]))
 
-## Abre una puerta real en la pared East/West de esta sala: reemplaza el
-## CollisionShape2D/ColorRect de esa pared por dos segmentos angostos con un
-## vano central, y pone un Area2D sensor en el vano que dispara la
-## transición cuando el jugador lo cruza (nada de click). La pared opuesta
-## (no elegida) queda sólida para siempre.
+## Abre la puerta de `side`: la marca como abierta y regenera los muros
+## (el vano es simplemente un tramo que _build_walls_for_room() ya no
+## genera), después pone un Area2D sensor en el hueco que dispara la
+## transición cuando el jugador lo cruza (nada de click). Las puertas no
+## elegidas nunca se abren — sin backtracking, a propósito.
 func _open_door(side: String, dest_room_id: String) -> void:
 	_door_open = true
-	var wall_name: String = String(SIDE_TO_WALL[side])
-	var wall_node: StaticBody2D = _walls.get_node(wall_name)
-	_open_door_in_wall(wall_node, DOOR_GAP_HALF_HEIGHT)
+	if not _open_door_sides.has(side):
+		_open_door_sides.append(side)
+	_rebuild_walls()
+
+	var room: Dictionary = RoomData.get_room(current_room_id)
+	var door_pos: Vector2 = room["doors"][side]["pos"]
+	var vertical: bool = _is_vertical_side(side)
 
 	var trigger := Area2D.new()
 	trigger.name = "DoorTrigger"
 	trigger.collision_layer = 0
 	trigger.collision_mask = 1  # capa del jugador
-	wall_node.add_child(trigger)
-	trigger.position = Vector2.ZERO
+	_walls.add_child(trigger)
+	trigger.global_position = door_pos
 
 	var trigger_shape := RectangleShape2D.new()
-	trigger_shape.size = Vector2(WALL_THICKNESS + 20.0, DOOR_GAP_HALF_HEIGHT * 2.0)
+	# El lado "largo" del sensor cubre el ancho del vano; el corto abarca
+	# el grosor del muro más un margen, para que no se pueda atravesar el
+	# hueco en un solo frame rápido sin dispararlo.
+	var long_side: float = DOOR_GAP_HALF_HEIGHT * 2.0
+	var short_side: float = WALL_THICKNESS + 24.0
+	trigger_shape.size = Vector2(short_side, long_side) if vertical else Vector2(long_side, short_side)
 	var trigger_cs := CollisionShape2D.new()
 	trigger_cs.shape = trigger_shape
 	trigger.add_child(trigger_cs)
@@ -334,64 +365,222 @@ func _on_door_crossed(body: Node2D, dest_room_id: String) -> void:
 		return
 	_transition_to_room(dest_room_id)
 
-## Función aislada a propósito (ver plan): reemplaza el CollisionShape2D
-## sólido de `wall_node` (una de East/West, siempre vertical, alto
-## WALL_HEIGHT) por dos segmentos StaticBody2D nuevos ("DoorSegTop"/
-## "DoorSegBottom") que dejan un vano de `gap_half_height * 2` centrado en
-## y=0 local. La forma/ColorRect ORIGINALES no se tocan ni se duplican mal
-## (East y West comparten el mismo sub_resource en Main.tscn) — simplemente
-## se deshabilitan/ocultan, así _restore_walls() los puede reactivar sin
-## reconstruir nada.
-func _open_door_in_wall(wall_node: StaticBody2D, gap_half_height: float) -> void:
-	var orig_shape: CollisionShape2D = wall_node.get_node("CollisionShape2D")
-	orig_shape.disabled = true
-	var orig_rect: ColorRect = wall_node.get_node("ColorRect")
-	orig_rect.visible = false
+## east/west = muro vertical (el vano se extiende en Y);
+## north/south = muro horizontal (el vano se extiende en X).
+func _is_vertical_side(side: String) -> bool:
+	return side == "east" or side == "west"
 
-	var half_total: float = WALL_HEIGHT / 2.0
-	var seg_height: float = half_total - gap_half_height
-	if seg_height <= 0.0:
+# ---------------------------------------------------------------------------
+# Generación de muros a partir de la unión de rects de la sala
+# ---------------------------------------------------------------------------
+
+## Convierte los rects de la sala en un set de celdas de grilla (misma
+## grilla que tools/validate_rooms.py). El Dictionary se usa como set:
+## Vector2i -> true, porque GDScript no tiene un tipo Set nativo.
+func _room_cells(room: Dictionary) -> Dictionary:
+	var cells: Dictionary = {}
+	for r in room["rects"]:
+		var rect: Rect2 = r
+		var cx0: int = int(floor(rect.position.x / WALL_CELL))
+		var cy0: int = int(floor(rect.position.y / WALL_CELL))
+		var cx1: int = int(floor((rect.position.x + rect.size.x) / WALL_CELL))
+		var cy1: int = int(floor((rect.position.y + rect.size.y) / WALL_CELL))
+		for cy in range(cy0, cy1):
+			for cx in range(cx0, cx1):
+				cells[Vector2i(cx, cy)] = true
+	return cells
+
+## Bounding box en coordenadas de mundo de la unión de rects.
+func _room_bounds(room: Dictionary) -> Rect2:
+	var bounds: Rect2 = room["rects"][0]
+	for i in range(1, room["rects"].size()):
+		bounds = bounds.merge(room["rects"][i])
+	return bounds
+
+## Regenera TODOS los muros de la sala activa desde cero, respetando los
+## vanos de las puertas ya abiertas (_open_door_sides).
+func _rebuild_walls() -> void:
+	for child in _walls.get_children():
+		_walls.remove_child(child)
+		child.queue_free()
+	_build_walls_for_room(RoomData.get_room(current_room_id))
+
+## Recorre el borde de la unión de celdas y genera un StaticBody2D por
+## cada tramo recto de muro.
+##
+## Por qué así y no 4 paredes fijas: con salas que son unión de rects
+## (pasillos, formas en L, cuartos laterales) el "borde" ya no son 4
+## rectas. Se detecta celda por celda —una celda es borde si su vecina en
+## esa dirección está fuera de la unión— y después se FUSIONAN las celdas
+## borde consecutivas en tramos, para terminar con unas decenas de nodos
+## en vez de uno por celda.
+##
+## Las puertas abiertas se restan de los tramos: el vano no es un nodo que
+## se deshabilita, es un pedazo de muro que simplemente no se genera.
+func _build_walls_for_room(room: Dictionary) -> void:
+	var cells: Dictionary = _room_cells(room)
+	var doors: Dictionary = room["doors"]
+
+	# dir_name -> (offset de vecino, si el muro es vertical)
+	var dirs: Array = [
+		["north", Vector2i(0, -1), false],
+		["south", Vector2i(0, 1), false],
+		["west", Vector2i(-1, 0), true],
+		["east", Vector2i(1, 0), true],
+	]
+
+	for d in dirs:
+		var dir_name: String = d[0]
+		var offset: Vector2i = d[1]
+		var wall_is_vertical: bool = d[2]
+
+		# Celdas de borde en esta dirección, agrupadas por la coordenada
+		# fija (la fila para muros horizontales, la columna para los
+		# verticales) para poder fusionar tramos consecutivos.
+		var lanes: Dictionary = {}
+		for cell in cells:
+			var c: Vector2i = cell
+			if cells.has(c + offset):
+				continue
+			var lane_key: int = c.x if wall_is_vertical else c.y
+			var along: int = c.y if wall_is_vertical else c.x
+			if not lanes.has(lane_key):
+				lanes[lane_key] = []
+			lanes[lane_key].append(along)
+
+		for lane_key in lanes:
+			var alongs: Array = lanes[lane_key]
+			alongs.sort()
+			var run_start: int = alongs[0]
+			var prev: int = alongs[0]
+			for i in range(1, alongs.size()):
+				var cur: int = alongs[i]
+				if cur != prev + 1:
+					_emit_wall_run(dir_name, wall_is_vertical, lane_key, run_start, prev, doors)
+					run_start = cur
+				prev = cur
+			_emit_wall_run(dir_name, wall_is_vertical, lane_key, run_start, prev, doors)
+
+	# Muros INTERIORES: divisorias de oficina, columnas de estacionamiento,
+	# cualquier cosa sólida que no esté sobre el borde de la unión. Sin
+	# esto, una sala compuesta por varios rects queda como un único espacio
+	# abierto con muescas — no como cuartos separados. Se emiten tal cual,
+	# sin restarles vanos (los "huecos de puerta" internos se modelan
+	# dejando espacio ENTRE dos blockers, ver RoomData.gd).
+	for b in room.get("blockers", []):
+		var blocker: Rect2 = b
+		_make_wall_body(blocker.position + blocker.size / 2.0, blocker.size)
+
+## Genera el/los StaticBody2D de un tramo de muro, restándole el vano de
+## cualquier puerta abierta que lo cruce (por eso puede emitir 0, 1 o 2
+## pedazos: el vano puede partir el tramo al medio).
+func _emit_wall_run(dir_name: String, wall_is_vertical: bool, lane_key: int, from_along: int, to_along: int, doors: Dictionary) -> void:
+	# Rango del tramo sobre el eje "largo", en coordenadas de mundo.
+	var along_min: float = float(from_along) * WALL_CELL
+	var along_max: float = float(to_along + 1) * WALL_CELL
+
+	# Posición del muro sobre el eje "corto": pegado por fuera del borde.
+	var fixed_outer: float
+	match dir_name:
+		"north":
+			fixed_outer = float(lane_key) * WALL_CELL
+		"south":
+			fixed_outer = float(lane_key + 1) * WALL_CELL
+		"west":
+			fixed_outer = float(lane_key) * WALL_CELL
+		_:
+			fixed_outer = float(lane_key + 1) * WALL_CELL
+	var outward: float = -1.0 if (dir_name == "north" or dir_name == "west") else 1.0
+
+	# Vanos que caen sobre este tramo (solo puertas abiertas de este lado).
+	var gaps: Array = []
+	for side in _open_door_sides:
+		if not doors.has(side):
+			continue
+		if _is_vertical_side(side) != wall_is_vertical:
+			continue
+		var dpos: Vector2 = doors[side]["pos"]
+		# El vano tiene que estar en ESTE tramo, no en el muro opuesto: se
+		# compara la coordenada del eje corto contra la del tramo.
+		var door_fixed: float = dpos.x if wall_is_vertical else dpos.y
+		if abs(door_fixed - fixed_outer) > WALL_CELL:
+			continue
+		var door_along: float = dpos.y if wall_is_vertical else dpos.x
+		gaps.append([door_along - DOOR_GAP_HALF_HEIGHT, door_along + DOOR_GAP_HALF_HEIGHT])
+
+	# Resta de los vanos: parte el intervalo [along_min, along_max] en los
+	# pedazos que quedan sólidos.
+	var pieces: Array = [[along_min, along_max]]
+	for g in gaps:
+		var next_pieces: Array = []
+		for p in pieces:
+			if g[1] <= p[0] or g[0] >= p[1]:
+				next_pieces.append(p)
+				continue
+			if p[0] < g[0]:
+				next_pieces.append([p[0], g[0]])
+			if g[1] < p[1]:
+				next_pieces.append([g[1], p[1]])
+		pieces = next_pieces
+
+	for p in pieces:
+		var length: float = p[1] - p[0]
+		if length < 1.0:
+			continue
+		var center_along: float = (p[0] + p[1]) / 2.0
+		var center_fixed: float = fixed_outer + outward * (WALL_THICKNESS / 2.0)
+		var center: Vector2 = Vector2(center_fixed, center_along) if wall_is_vertical else Vector2(center_along, center_fixed)
+		var size: Vector2 = Vector2(WALL_THICKNESS, length) if wall_is_vertical else Vector2(length, WALL_THICKNESS)
+		_make_wall_body(center, size)
+
+func _make_wall_body(center: Vector2, size: Vector2) -> void:
+	var body := StaticBody2D.new()
+	body.name = "WallSeg"
+	body.collision_layer = 8
+	_walls.add_child(body)
+	body.global_position = center
+
+	var rect := ColorRect.new()
+	rect.color = WALL_COLOR
+	rect.offset_left = -size.x / 2.0
+	rect.offset_right = size.x / 2.0
+	rect.offset_top = -size.y / 2.0
+	rect.offset_bottom = size.y / 2.0
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(rect)
+
+	var shape := RectangleShape2D.new()
+	shape.size = size
+	var cs := CollisionShape2D.new()
+	cs.shape = shape
+	body.add_child(cs)
+
+## Ajusta los límites de la cámara del jugador al bounding box de la sala
+## activa. Antes eran fijos y hardcodeados en Player.tscn (±490/±360), lo
+## que solo servía mientras todas las salas fueran el mismo rectángulo de
+## 900x640 — con salas de forma y tamaño distinto hay que recalcularlos en
+## cada transición o la cámara muestra el vacío / recorta la sala.
+func _apply_camera_limits(room: Dictionary) -> void:
+	var bounds: Rect2 = _room_bounds(room)
+	# Publica los límites para todo lo que necesite "no salirte del mapa"
+	# sin conocer Main: clamp de patrulla de los bots y clamp del empujón
+	# de melee/dash del jugador (ver Arena.gd).
+	Arena.set_bounds(bounds)
+	var cam: Camera2D = _player.get_node_or_null("Camera2D")
+	if cam == null:
 		return
-
-	for sign_mult in [-1.0, 1.0]:
-		var seg_center_y: float = sign_mult * (gap_half_height + seg_height / 2.0)
-		var seg_name: String = "DoorSegTop" if sign_mult < 0.0 else "DoorSegBottom"
-
-		var body := StaticBody2D.new()
-		body.name = seg_name
-		body.collision_layer = 8
-		wall_node.add_child(body)
-		body.position = Vector2(0, seg_center_y)
-
-		var rect := ColorRect.new()
-		rect.color = WALL_COLOR
-		rect.offset_left = -WALL_THICKNESS / 2.0
-		rect.offset_right = WALL_THICKNESS / 2.0
-		rect.offset_top = -seg_height / 2.0
-		rect.offset_bottom = seg_height / 2.0
-		body.add_child(rect)
-
-		var shape := RectangleShape2D.new()
-		shape.size = Vector2(WALL_THICKNESS, seg_height)
-		var cs := CollisionShape2D.new()
-		cs.shape = shape
-		body.add_child(cs)
-
-## Restaura las 4 paredes a sólidas: libera cualquier segmento/trigger de
-## puerta agregado por _open_door_in_wall()/_open_door() y reactiva la forma
-## y el ColorRect originales de cada pared.
-func _restore_walls() -> void:
-	for wall_node in _walls.get_children():
-		for child in wall_node.get_children():
-			if String(child.name).begins_with("Door"):
-				child.queue_free()
-		var shape: CollisionShape2D = wall_node.get_node("CollisionShape2D")
-		shape.disabled = false
-		var rect: ColorRect = wall_node.get_node("ColorRect")
-		rect.visible = true
+	cam.limit_left = int(bounds.position.x - CAMERA_MARGIN)
+	cam.limit_top = int(bounds.position.y - CAMERA_MARGIN)
+	cam.limit_right = int(bounds.position.x + bounds.size.x + CAMERA_MARGIN)
+	cam.limit_bottom = int(bounds.position.y + bounds.size.y + CAMERA_MARGIN)
+	# Reposiciona el fondo para cubrir el bbox nuevo (el Sprite2D usa
+	# region_rect sobre una textura de arena pre-horneada de 2000x2000).
+	_background.position = bounds.position
+	_background.region_rect = Rect2(Vector2.ZERO, bounds.size)
 
 ## Reposiciona/muestra los mismos 5 StaticBody2D de Props (no instancia
-## nada nuevo) y actualiza el tinte del CanvasModulate según `room`.
+## nada nuevo), regenera los muros, ajusta la cámara y actualiza el tinte
+## del CanvasModulate según `room`.
 func _apply_room(room: Dictionary) -> void:
 	var props_cfg: Array = room["props"]
 	for i in range(PROP_NAMES.size()):
@@ -405,17 +594,24 @@ func _apply_room(room: Dictionary) -> void:
 	var tint: Variant = room["tint"]
 	_canvas_modulate.color = tint if tint != null else DEFAULT_TINT
 
-## Restaura las paredes, cambia de sala activa y arranca lo que corresponda
-## en la sala nueva (siguiente oleada, o el jefe si es room_boss).
+	_rebuild_walls()
+	_apply_camera_limits(room)
+
+## Cambia de sala activa y arranca lo que corresponda en la sala nueva
+## (siguiente oleada, o el jefe si es room_boss). Los muros no se
+## "restauran": _apply_room() los regenera enteros para la sala destino,
+## con _open_door_sides ya vacío, así que arrancan todos sólidos.
 func _transition_to_room(dest_room_id: String) -> void:
-	_restore_walls()
 	_door_open = false
+	_open_door_sides.clear()
 	waves_in_room = 0
 	current_room_id = dest_room_id
 
 	var room: Dictionary = RoomData.get_room(dest_room_id)
 	_apply_room(room)
-	_player.global_position = Vector2(0, 0)
+	# `entry` en vez de (0,0): con salas de forma asimétrica el centro
+	# geométrico puede caer dentro de un muro o fuera de la sala.
+	_player.global_position = room["entry"]
 
 	if bool(room["is_boss"]):
 		_spawn_boss()

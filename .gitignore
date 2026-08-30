@@ -5,6 +5,10 @@ export.cfg
 export_presets.cfg
 *.translation
 
+# Python (tools/ de validación, ver prototypes/*/tools/)
+__pycache__/
+*.pyc
+
 # OS
 .DS_Store
 Thumbs.db

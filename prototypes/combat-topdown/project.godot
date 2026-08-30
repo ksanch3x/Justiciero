@@ -15,6 +15,7 @@ config/features=PackedStringArray("4.3", "GL Compatibility")
 Fx="*res://scripts/Fx.gd"
 FactionManager="*res://scripts/FactionManager.gd"
 SaveManager="*res://scripts/SaveManager.gd"
+Arena="*res://scripts/Arena.gd"
 
 [input]
 

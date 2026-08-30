@@ -24,9 +24,9 @@ enum State { PATROL, ALERT, CHASE, ATTACK }
 ## golpe de contacto conecte de verdad — antes el daño era instantáneo al
 ## tocar, sin ningún aviso para poder esquivar.
 @export var attack_telegraph_time: float = 0.25
-## Radio de detección circular (PATROL -> ALERT). Ver comentario del enum:
-## esta ES la detección "Área2D circular" del GDD, implementada por
-## distancia porque no hay Area2D/raycast todavía.
+## Alcance máximo del cono de visión (PATROL -> ALERT). El ángulo lo pone
+## `view_angle` y la cobertura la resuelve Player.is_hidden_from() — ver
+## _can_see_player().
 @export var detection_range: float = 260.0
 ## Si el jugador se aleja más que esto durante CHASE/ALERT, se pierde el
 ## rastro y vuelve a PATROL/ALERT. A propósito mayor que detection_range
@@ -178,21 +178,16 @@ func _process_patrol() -> void:
 		return
 	velocity = to_target.normalized() * patrol_speed
 
-## Clampeado dentro del interior jugable (bug reportado: "patrullan raro" —
-## sin esto, un spawn cerca de una pared podía elegir un punto de patrulla
-## detrás de ella; el enemigo caminaba contra la pared sin poder llegar
-## nunca, atascado ahí en vez de patrullar). Mismos límites que
-## Player._clamp_to_arena().
-const PATROL_ARENA_MIN: Vector2 = Vector2(-400, -270)
-const PATROL_ARENA_MAX: Vector2 = Vector2(400, 270)
-
+## El punto de patrulla se clampea al área jugable de la sala ACTIVA
+## (Arena.clamp_point, autoload) — sin esto un spawn cerca de un borde
+## podía elegir un destino detrás de la pared y el bot quedaba
+## empujando contra ella sin llegar nunca. Antes el clamp era una
+## constante local con el rectángulo viejo; ahora las salas tienen
+## formas y tamaños distintos (ver RoomData.gd), así que los límites
+## los publica Main en cada transición.
 func _pick_patrol_target() -> void:
 	var offset := Vector2(randf_range(-patrol_radius, patrol_radius), randf_range(-patrol_radius, patrol_radius))
-	var target: Vector2 = _spawn_position + offset
-	_patrol_target = Vector2(
-		clampf(target.x, PATROL_ARENA_MIN.x, PATROL_ARENA_MAX.x),
-		clampf(target.y, PATROL_ARENA_MIN.y, PATROL_ARENA_MAX.y)
-	)
+	_patrol_target = Arena.clamp_point(_spawn_position + offset)
 
 func take_damage(amount: int) -> void:
 	health -= amount

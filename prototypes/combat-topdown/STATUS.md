@@ -195,11 +195,11 @@ diseño. Pesos de aparición por tipo suben gradualmente con la oleada (ver
 comentario en `Main._pick_enemy_scene()`).
 
 ### Escenario
-- **Arena cerrada**: área interior jugable **900x640**, centrada en el
-  origen (`x: [-450, 450]`, `y: [-320, 320]`). Antes era un área abierta de
-  2000x2000 sin bordes; se achicó a pedido del usuario para que se sienta
-  como un layout real (una sola sala cerrada, no salas múltiples conectadas
-  — eso queda para más adelante).
+- **Salas con FORMA (unión de rectángulos)** — ver la sección
+  "Geometría de sala" más abajo. Ya NO hay una arena única de 900x640: cada
+  sala define su propia lista de `Rect2` en `RoomData.gd` y Main genera los
+  muros y los límites de cámara a partir de eso. Los tamaños van de 500x560
+  (room_4a) a 1240x320 (room_3, el andén).
 - Fondo: `assets/generated/sand_floor_2000.png` — **generado con Python/PIL**
   (no está en Godot vía `texture_repeat`, causaba costuras visibles porque el
   primer tile elegido no era plano). Es una textura de 2000x2000 pre-tileada
@@ -209,27 +209,23 @@ comentario en `Main._pick_enemy_scene()`).
   textura completa. Si hace falta regenerarla, el script de generación está
   en el historial de commits (no versionado como script aparte, se ejecutó
   inline).
-- **Paredes** (`Main.tscn`, nodo `Walls`): 4 `StaticBody2D`
-  (`North`/`South`/`East`/`West`), grosor 40px, ubicados justo afuera del
-  área interior y extendidos en las esquinas para cerrar el borde sin
-  huecos. Visual: `ColorRect` con `Color(0.278431, 0.196078, 0.294118)` —
-  color RGB real (71, 50, 75) de `tile_0140.png`, confirmado con
-  `Image.getdata()` (uno de los tiles 100% planos ya identificados abajo).
-  Colisión: `RectangleShape2D`, `collision_layer=8` (misma capa que
-  `Props`), así que Player/Enemy/Runner/Spitter ya chocan contra ellas sin
-  tocar sus scripts (todos tienen `collision_mask=8`).
-- `SpawnPoint1..5` (`Main.tscn`) reposicionados a `±380/±260` (antes
-  `±400/±300`) para quedar cómodos dentro de la arena más chica, con margen
-  real respecto a las paredes.
-- `Camera2D` del jugador (`Player.tscn`) tiene límites
-  (`limit_left/right/top/bottom = ∓490/∓360`) ajustados a la arena + el
-  grosor de pared, para que nunca se vea el vacío fuera del área jugable.
-  Sigue al jugador siempre (es hija de `Player`, se mueve con él) —
-  `position_smoothing_enabled=true`/`speed=8.0` agregado para que no sea
-  un snap instantáneo. **Los límites siguen siendo globales y fijos** —
-  para salas más grandes/asimétricas que las 900x640 actuales, van a
-  necesitar calcularse por sala (bounding box de la unión de rectángulos
-  activa) en vez de este valor único hardcodeado.
+- **Paredes**: generadas 100% por código (`Main._build_walls_for_room()`),
+  el nodo `Walls` de `Main.tscn` arranca vacío. Grosor 40px, visual
+  `ColorRect` con `Color(0.278431, 0.196078, 0.294118)` — color RGB real
+  (71, 50, 75) de `tile_0140.png`, confirmado con `Image.getdata()`.
+  Colisión `RectangleShape2D` en `collision_layer=8` (misma capa que
+  `Props`), así que todos los cuerpos siguen chocando sin tocar sus
+  scripts (todos tienen `collision_mask=8`).
+- **Spawns de oleada**: salen de `RoomData` (`spawns` por sala), no del
+  nodo fijo `SpawnPoints` (eliminado de `Main.tscn`) — los 5 puntos fijos
+  del rectángulo viejo caían dentro de muros en las salas con forma.
+- `Camera2D` del jugador sigue al jugador (es hija de `Player`) con
+  `position_smoothing_enabled=true`/`speed=8.0`. Sus **límites se
+  recalculan por sala** en `Main._apply_camera_limits()` a partir del
+  bounding box de la unión de rects + `CAMERA_MARGIN` — los valores de
+  `Player.tscn` quedan solo como default de arranque. El fondo (`Sprite2D`
+  con `region_rect` sobre la textura de arena pre-horneada) se
+  reposiciona/redimensiona en la misma función para cubrir el bbox nuevo.
 - Props sólidos (`Main.tscn`, nodo `Props`): 2 cactus, 2 rocas/huesos, 1
   formación rocosa — `StaticBody2D`, `collision_layer=8`. Bloquean a
   jugador/enemigos (ambos tienen `collision_mask=8`). Posiciones sin cambios
@@ -431,6 +427,53 @@ no tiene sentido persistir un stat sin nada que lo lea.
   + `PointLight2D` en jugador (ámbar), balas (blanco-amarillento chico) y
   enemigos (rojo tenue). Textura de luz generada (`assets/generated/light_glow.tres`,
   `GradientTexture2D` radial), no es un asset de imagen.
+
+### Geometría de sala: unión de rectángulos + muros generados
+
+Antes las 7 salas eran **el mismo rectángulo de 900x640** y las paredes
+eran 4 `StaticBody2D` fijos en `Main.tscn`; lo único que cambiaba entre
+salas era el tinte y los props. Ahora cada sala define su propia forma.
+
+- **`RoomData.rects`**: lista de `Rect2` cuya UNIÓN es el interior
+  jugable. Permite pasillos, cuartos laterales y formas en L sin tocar
+  código. Dos rects tienen que **solaparse** para conectar, no solo
+  tocarse en la arista (el generador trabaja sobre una grilla de
+  `WALL_CELL=20px`; dos rects que solo comparten borde dejan pared).
+- **`RoomData.blockers`** (opcional): muros INTERIORES sólidos —
+  divisorias de oficina en `room_2a`, las 20 columnas del estacionamiento
+  en `room_2b`. Sin esto una sala de varios rects se lee como un único
+  espacio abierto con muescas, no como cuartos separados. Un vano interno
+  se modela dejando hueco ENTRE dos blockers, no restándoselo a uno.
+- **`Main._build_walls_for_room()`**: recorre el borde de la unión celda
+  por celda (una celda es borde si su vecina en esa dirección está fuera),
+  **fusiona las celdas borde consecutivas en tramos** y emite un
+  `StaticBody2D` por tramo — decenas de nodos, no uno por celda. Rinde
+  entre 4 (room_boss) y 14 (room_3) segmentos por sala.
+- **Puertas**: ya no se "abren" deshabilitando un nodo. `_open_door()`
+  agrega el lado a `_open_door_sides` y **regenera todos los muros**; el
+  vano es simplemente el tramo que `_emit_wall_run()` no emite (le resta
+  el intervalo del vano, y puede partir un tramo en dos). Después pone un
+  `Area2D` sensor en el hueco que dispara la transición al cruzarlo.
+- **`RoomData.entry`**: dónde aparece el jugador al entrar. Antes era
+  siempre `(0,0)`, que con formas asimétricas puede caer dentro de un muro
+  o fuera de la sala.
+- **`Arena.gd` (autoload nuevo)**: publica el bbox de la sala activa.
+  Reemplaza **5 copias hardcodeadas** del rectángulo viejo
+  (`PATROL_ARENA_MIN/MAX` en Enemy/Spitter/Police/Criminal, `ARENA_MIN/MAX`
+  en Player). Lo usan el clamp de patrulla de los bots y el clamp del
+  empujón de melee/dash. Es el **bounding box**, no la forma exacta —
+  alcanza para "no salirte del mapa"; la colisión fina la hace la física.
+
+**Verificación sin Godot** (`tools/validate_rooms.py`, correr con
+`python3 tools/validate_rooms.py`): parsea `RoomData.gd` y chequea que la
+unión de cada sala esté conectada, que `entry`/`spawns`/`props` caigan
+dentro y no pisen un blocker, que cada puerta caiga sobre el borde y
+apunte a una sala existente, que todas las salas sean alcanzables desde
+`room_1`, y que los spawns fijos de Policía/Criminal de `Main.gd` caigan
+dentro de `room_1`. El script tiene self-test implícito: se probó
+metiéndole a propósito un spawn fuera del mapa, una puerta flotante y un
+rect desconectado, y detectó los tres. **Correrlo después de cualquier
+cambio en `RoomData.gd`.**
 
 ### Salas encadenadas, puertas y jefe (v2, cierre del demo)
 "Mazmorra con salas y elección de puerta", deliberadamente simple: **sin
