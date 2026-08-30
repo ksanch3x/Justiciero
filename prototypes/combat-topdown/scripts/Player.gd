@@ -34,7 +34,10 @@ var in_cover: bool = false
 ## apuntando a un enemigo cercano lo neutraliza sin matarlo tras un canal
 ## de takedown_channel_time — más lento y expuesto que el golpe normal
 ## (que sigue siendo instantáneo pero letal), a propósito.
-@export var takedown_range: float = 40.0
+## Subido de 40 — feedback jugando: "no pude noquear", casi imposible
+## acertar el rango antes sin ningún indicio visual de que estaba
+## funcionando (ver _process_takedown/tinte azul en el objetivo).
+@export var takedown_range: float = 60.0
 @export var takedown_channel_time: float = 0.6
 var _takedown_target: Node = null
 var _takedown_time_left: float = 0.0
@@ -435,6 +438,7 @@ func _process_takedown(delta: float) -> void:
 		_takedown_time_left = takedown_channel_time
 		if _takedown_target == null:
 			return
+		_set_takedown_tint(_takedown_target, true)
 
 	var dist: float = (_takedown_target.global_position - global_position).length()
 	if dist > takedown_range * 1.3:
@@ -448,8 +452,23 @@ func _process_takedown(delta: float) -> void:
 		_cancel_takedown()
 
 func _cancel_takedown() -> void:
+	if is_instance_valid(_takedown_target):
+		_set_takedown_tint(_takedown_target, false)
 	_takedown_target = null
 	_takedown_time_left = 0.0
+
+## Único feedback visual de que el canal de noqueo está funcionando: el
+## objetivo se tiñe de azul mientras dura. Sin esto no hay NADA en pantalla
+## que confirme que mantener "takedown" está haciendo algo — bug reportado
+## jugando ("no pude noquear", el jugador no tenía forma de saber si
+## estaba dentro de rango o no). Se busca el nodo "Visual" por nombre en
+## vez de acceder a la variable privada `_anim` de cada script (mismo
+## nombre de nodo en Enemy/Spitter/Police/Criminal.tscn).
+func _set_takedown_tint(target: Node, on: bool) -> void:
+	var visual: CanvasItem = target.get_node_or_null("Visual")
+	if visual == null:
+		return
+	visual.modulate = Color(0.4, 0.7, 1.0, 1.0) if on else Color(1.0, 1.0, 1.0, 1.0)
 
 ## Solo enemigos que exponen knockout() son objetivo válido (Enemy.gd,
 ## Spitter.gd, Police.gd, Criminal.gd) — no hace falta filtrar por tipo acá,

@@ -368,16 +368,24 @@ escondido).
 que dependa de "murió de verdad" (`SaveManager.add_police_kill()`,
 conectada solo a `police.died` en `Main._spawn_police()`) se dispare con
 un noqueo. Confirma la regla del GDD 2.5: "noquear no sube Notoriedad".
-`Player._process_takedown()`: mantener `takedown` apuntando a un enemigo
-dentro de `takedown_range` (40px) lo neutraliza tras un canal de
-`takedown_channel_time` (0.6s) — más lento y expuesto que el golpe normal
-(instantáneo pero letal), a propósito, para que sea una decisión táctica
-real. El objetivo queda "trabado" mientras se canaliza (no cambia si otro
-enemigo se acerca más) y se cancela si se suelta el botón o el objetivo
-sale de rango. Simplificación de prototipo: visualmente `knockout()` usa
-el mismo `Fx.play_death()` que morir de verdad — el nodo desaparece igual,
-la diferencia es 100% semántica (qué señal se emite). Sin cuerpo
-"noqueado" persistente todavía.
+`Player._process_takedown()`: mantener `takedown` (F) apuntando a un
+enemigo dentro de `takedown_range` (60px, subido de 40 — feedback
+jugando: "no pude noquear", el rango original era casi imposible de
+acertar) lo neutraliza tras un canal de `takedown_channel_time` (0.6s) —
+más lento y expuesto que el golpe normal (instantáneo pero letal), a
+propósito, para que sea una decisión táctica real. El objetivo queda
+"trabado" mientras se canaliza (no cambia si otro enemigo se acerca más)
+y se cancela si se suelta el botón o el objetivo sale de rango.
+**Feedback visual del canal** (`_set_takedown_tint()`, agregado por el
+mismo bug de arriba — sin esto no había NADA en pantalla que confirmara
+que mantener el botón hacía algo): el objetivo se tiñe de azul
+(`Color(0.4, 0.7, 1.0)`) mientras dura el canal, vía el nodo hijo
+`"Visual"` (mismo nombre en las 4 escenas, se accede por nombre de nodo
+en vez de la variable privada `_anim` de cada script). Simplificación de
+prototipo: visualmente `knockout()` usa el mismo `Fx.play_death()` que
+morir de verdad — el nodo desaparece igual, la diferencia es 100%
+semántica (qué señal se emite). Sin cuerpo "noqueado" persistente
+todavía.
 
 HUD (`Main._update_hud()`): sufijo `"[Cobertura]"` mientras `in_cover` es
 `true`, para poder confirmar el estado jugando sin adivinar.
