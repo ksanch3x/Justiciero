@@ -235,9 +235,45 @@ facción Policía real que reaccione a esto (siguiente paso). Registrado en
 - **Por misión**: `Main._ready()` llama `FactionManager.reset()` al
   arrancar cada corrida — no confundir con una futura Notoriedad
   persistente (GDD 2.5, no implementada).
-- Visible en el HUD (`Main._update_hud()`, sufijo `"Alerta: <nombre>"`) solo
-  para poder probar que sube/decae bien mientras no hay policía que lo
-  consuma de verdad.
+- Visible en el HUD (`Main._update_hud()`, sufijo `"Alerta: <nombre>"`).
+
+### Facción Policía (`scripts/Police.gd`/`scenes/Police.tscn`)
+Segunda mitad de la Fase 3: ya hay alguien reaccionando al Nivel de Alerta.
+Script propio (no `extends Enemy.gd`) porque el disparador de la
+persecución es otro: un nivel de alerta global vía
+`FactionManager.level_changed`, no distancia directa al jugador como en
+`Enemy.gd`. Mismo patrón de movimiento/telegraph que `Enemy.gd` (calcado a
+propósito, ver comentarios en el archivo).
+- `enum State { PATROL, INVESTIGATE, PURSUE, ATTACK }`.
+  - **PATROL**: pasea cerca del spawn, igual que Enemy.gd.
+  - **INVESTIGATE**: entra al subir el nivel a SUSPICION estando en
+    PATROL — camina a `FactionManager.last_noise_position` y se queda
+    `investigate_timeout` (4s) "mirando alrededor" antes de rendirse a
+    PATROL si el nivel no siguió subiendo.
+  - **PURSUE**: entra apenas el nivel llega a CHASE (o más), sin importar
+    el estado anterior — persigue en línea recta como `Enemy.CHASE`.
+  - **ATTACK**: mismo telegraph+daño de contacto que `Enemy.gd`, sin
+    arresto/no-letal todavía (GDD 2.3, pendiente).
+  - Recibir daño saca de PATROL/INVESTIGATE directo a PURSUE, igual que en
+    Enemy.gd.
+- Grupo **`"enemy"`** a propósito (además de `"police"`): así el melee y el
+  empuje de área del dash del jugador (que iteran
+  `get_nodes_in_group("enemy")`) funcionan contra la policía sin tocar ese
+  código. `Main.gd` nunca escanea ese grupo para las oleadas (confirmado
+  antes de esta decisión), así que no hay riesgo de que cuente como
+  enemigo de oleada.
+- Física: `collision_layer=2`/`mask=10`, igual que `Enemy.tscn` — comparte
+  layer con los enemigos a propósito para que las balas del jugador
+  (`target_mask=2`) le hagan daño sin cambiar `Bullet.gd`.
+- **Sprite**: el pack de enemigos no tiene una 5ta fila libre (las 4 ya
+  están usadas: Spitter/Runner/Grunt/Jefe) — se reusan los mismos tiles del
+  Jugador (`Players/Tiles/tile_0008-0010`) con `modulate` azul, que es
+  justo lo que pide el GDD 4 ("Facciones: diferenciadas por color/silueta").
+- `Main._spawn_police()`: por ahora un solo policía fijo, instanciado en
+  `_ready()` en `(-350, -260)`, patrullando desde el arranque. No se
+  reposiciona por sala (las 7 salas comparten la misma geometría 900x640,
+  ver `RoomData.gd`) — simplificación deliberada de esta primera versión,
+  no hay refuerzos ni bloqueo de salidas (GDD Nivel 3 "Bloqueo") todavía.
 
 - **Jugo visual sin audio** (`scripts/Fx.gd`, autoload): `flash_damage(sprite)`
   (tween de `modulate` rojo-blanco al recibir daño) y

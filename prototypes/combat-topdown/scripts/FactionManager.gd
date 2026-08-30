@@ -32,6 +32,10 @@ const NOISE_MELEE: float = 6.0
 var meter: float = 0.0
 var level: int = AlertLevel.IGNORED
 var _hold_timer: float = 0.0
+## Última posición donde se generó ruido — a dónde va Police.gd a
+## investigar cuando el nivel sube a SUSPICION. Sin sentido hasta el primer
+## report_noise(); Police.gd solo lo lee después de que el nivel ya subió.
+var last_noise_position: Vector2 = Vector2.ZERO
 
 signal level_changed(new_level: int, old_level: int)
 
@@ -45,10 +49,12 @@ func _process(delta: float) -> void:
 	_recompute_level()
 
 ## Reporta una fuente de ruido (ver constantes NOISE_*). `amount` vive en el
-## mismo rango 0-100 del medidor.
-func report_noise(amount: float) -> void:
+## mismo rango 0-100 del medidor. `position` es dónde ocurrió — Police.gd la
+## usa como punto de investigación cuando el nivel sube a SUSPICION.
+func report_noise(amount: float, position: Vector2) -> void:
 	meter = min(100.0, meter + amount)
 	_hold_timer = decay_hold_time
+	last_noise_position = position
 	_recompute_level()
 
 func _recompute_level() -> void:

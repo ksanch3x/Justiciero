@@ -3,6 +3,7 @@ extends Node2D
 @export var enemy_scene: PackedScene = preload("res://scenes/Enemy.tscn")
 @export var spitter_scene: PackedScene = preload("res://scenes/Spitter.tscn")
 @export var runner_scene: PackedScene = preload("res://scenes/Runner.tscn")
+@export var police_scene: PackedScene = preload("res://scenes/Police.tscn")
 
 ## Sprite del jefe: fila sin usar hasta ahora del pack (fila 3, "morada"),
 ## ver STATUS.md sección "Mapa de assets". Son tiles 24x24 completos, igual
@@ -117,6 +118,7 @@ func _ready() -> void:
 	FactionManager.reset()
 
 	_apply_room(RoomData.get_room(current_room_id))
+	_spawn_police()
 
 	# Menú principal primero (bloquea _process igual que _choosing_upgrade):
 	# recién al tocar "Jugar" arranca la pantalla de elegir arma inicial.
@@ -231,6 +233,17 @@ func _spawn_enemy() -> void:
 
 func _on_enemy_died() -> void:
 	enemies_alive -= 1
+
+## Un solo policía patrullando desde el arranque, para poder probar la
+## reacción al Nivel de Alerta (GDD Fase 3) sin todavía tener refuerzos ni
+## bloqueo de salidas. No se re-spawnea por sala como los enemigos de
+## oleada — las 7 salas comparten la misma geometría 900x640 (ver
+## RoomData.gd), así que con quedarse quieto entre transiciones alcanza
+## para esta primera versión.
+func _spawn_police() -> void:
+	var police := police_scene.instantiate()
+	add_child(police)
+	police.global_position = Vector2(-350, -260)
 
 func _show_upgrade_selection() -> void:
 	if _player.has_wave_regen and _player.health < _player.max_health:
