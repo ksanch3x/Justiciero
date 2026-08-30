@@ -28,7 +28,8 @@ scripts/
   Runner.gd       — extends Enemy.gd, solo cambia stats (rápido/débil)
   Spitter.gd      — enemigo a distancia, script propio (no hereda de Enemy.gd)
   Bullet.gd       — proyectil (Area2D), reusado por jugador y Spitter
-  Main.gd         — spawner de oleadas, HUD, selección de tipo de enemigo por oleada
+  Main.gd         — spawner de oleadas, HUD, salas/puertas/jefe
+  RoomData.gd     — datos estáticos de las 4 salas de la mazmorra (oleadas, enemigos, props, puertas, tinte)
   UpgradeTree.gd  — árbol de mejoras de la corrida (25 nodos, 3 ramas, filtrado por arma)
   UpgradeUI.gd    — panel de selección (elección inicial / mejoras / hito de arma)
   WeaponData.gd   — roster de armas (5 armas x 2 niveles), stats y sprites
@@ -193,6 +194,81 @@ comentario en `Main._pick_enemy_scene()`).
   + `PointLight2D` en jugador (ámbar), balas (blanco-amarillento chico) y
   enemigos (rojo tenue). Textura de luz generada (`assets/generated/light_glow.tres`,
   `GradientTexture2D` radial), no es un asset de imagen.
+
+### Salas encadenadas, puertas y jefe (primera versión, sin camera-follow)
+Primer intento de "mazmorra con salas y elección de puerta", deliberadamente
+simple: **sin escenas nuevas** (todo redecora la misma `Main.tscn`), **sin
+generación procedural real** (4 salas fijas) y **sin camera-follow** (la
+cámara sigue centrada en el jugador con los mismos `limit_*` de siempre,
+porque las 4 salas comparten exactamente la geometría 900x640 de antes).
+
+- **`scripts/RoomData.gd`** (nuevo, mismo patrón estático que
+  `UpgradeTree.gd`): 4 salas fijas — `room_1` (solo Grunt, 2 oleadas,
+  bifurca Este→`room_2a`/Oeste→`room_2b`) → `room_2a` (Grunt+Runner, tinte
+  cálido) o `room_2b` (Grunt+Runner+Spitter, tinte frío), cada una con 2
+  oleadas y 1 puerta Este → `room_boss` (sin oleadas, spawnea el jefe
+  directo, tinte rojo oscuro, 2 props menos para dejar espacio de
+  movimiento). Cada sala define `waves`, `enemy_types` (subconjunto de
+  Grunt/Runner/Spitter, además del gate normal por `wave_number` que ya
+  existía — una sala puede estar "por debajo" de lo que la oleada global
+  habilitaría), `doors` (lado → sala destino; 1 entrada = puerta única sin
+  UI, 2 entradas = elegir), `props` (5 entradas, una por cada
+  `StaticBody2D` fijo de `Props`, con posición/visibilidad — se reposicionan
+  los mismos 5 nodos, no se instancian nuevos) y `tint` opcional para el
+  `CanvasModulate`.
+- **`Main.gd`**: `wave_number`/`MILESTONE_EVERY` siguen intactos y globales
+  a toda la corrida (el escalado y los hitos no se tocaron). Se agregó
+  `waves_in_room` (se resetea a 0 en cada transición): cuando una sala
+  normal completa sus oleadas, `_open_room_doors()` abre la(s) puerta(s) EN
+  VEZ de mostrar el panel de mejoras — mejora y puerta nunca compiten por
+  la misma pantalla. La puerta se abre en código con
+  `_open_door_in_wall(wall_node, gap_half_height)` (función aislada a
+  propósito, la parte más delicada de revisar sin poder correr Godot):
+  deshabilita el `CollisionShape2D`/oculta el `ColorRect` originales de la
+  pared `East`/`West` elegida (nunca los muta directamente — East y West
+  comparten el mismo `sub_resource` de forma en `Main.tscn`, mutarlo
+  rompería la otra pared) y agrega dos `StaticBody2D` nuevos
+  ("DoorSegTop"/"DoorSegBottom") que dejan un vano de 140px centrado en
+  y=0, más un `Area2D` sensor ("DoorTrigger") en el vano que dispara
+  `_transition_to_room()` al cruzar (nada de click). La pared no elegida
+  queda sólida para siempre — sin backtracking, a propósito.
+  `_transition_to_room(dest_room_id)`: `_restore_walls()` (libera todo
+  nodo `Door*` y reactiva forma/`ColorRect` originales de las 4 paredes),
+  resetea `waves_in_room=0`, reposiciona/muestra los mismos 5 `Props` y el
+  tinte vía `_apply_room()`, teletransporta al jugador al centro, y arranca
+  la sala nueva (siguiente oleada, o `_spawn_boss()` si es `room_boss`).
+- **El jefe**: 100% overrides de instancia sobre `Enemy.tscn` en
+  `_spawn_boss()`, `Enemy.gd`/`Enemy.tscn` no se tocaron. Stats seteados
+  ANTES de `add_child()` (los lee `_ready()`): `max_health=220`,
+  `speed=95`, `contact_damage=4`, `contact_range=30`,
+  `attack_interval=1.1`, `attack_telegraph_time=0.35` (más largo que el
+  default, ventana de reacción a un golpe fuerte). Visual/colisión
+  seteados DESPUÉS de `add_child()`: usa el sprite de la fila 3 del pack de
+  enemigos (`tile_0012`-`tile_0014`, "morada"), sin usar hasta ahora — son
+  tiles 24x24 completos igual que Grunt/Runner, no hizo falta
+  `region_rect`/`Image.getbbox()`. `Visual.scale=2.4`, `CollisionShape2D`
+  con `CircleShape2D` nuevo de `radius=26` (el sprite crudo no viene más
+  grande que el Grunt). `SpriteFrames` construido en código
+  (`_make_boss_sprite_frames()`), no como `sub_resource` del `.tscn`. Sin
+  fases, sin ataque a distancia, sin invocar esbirros — a propósito, fuera
+  de alcance de esta primera versión. Al morir reusa `Enemy.gd.died` tal
+  cual: `_on_boss_died()` detiene el spawner (`set_process(false)`) y
+  cambia el HUD a "¡Jefe derrotado! Presioná R para reiniciar." — reusa el
+  `R` que ya existía, sin pantalla de victoria nueva.
+- **`UpgradeUI.gd`**: `show_choices(player, mode, doors)` gana un modo
+  `"door_pick"` (parámetro `doors` nuevo, opcional, con default `{}` para
+  no romper las llamadas existentes de `weapon_pick`/`milestone`/
+  `upgrade`) que reusa `_make_card_button()` para 2 tarjetas ("Puerta
+  Este"/"Puerta Oeste") sin ícono. A diferencia de los otros modos, no
+  emite `chosen` sino una señal nueva `door_chosen(side)` — Main necesita
+  saber QUÉ puerta se eligió, no solo que se eligió algo.
+- **Fuera de alcance a propósito** (igual que el plan original): más de un
+  jefe, restaurar la puerta no elegida o volver atrás, variar spawn points
+  por sala, cualquier mecánica nueva de jefe (fases/ataque a
+  distancia/invocación), generación procedural real.
+- **Sin verificar jugando** (no hay Godot en este entorno): que el hueco
+  de puerta se vea/sienta bien al cruzar, que el jefe se vea claramente
+  más grande, y que morir/ganarle cierre la demo correctamente.
 
 ## Capas de colisión (importante para no romper nada al agregar cosas)
 

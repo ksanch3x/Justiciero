@@ -1,8 +1,19 @@
 extends CanvasLayer
 
 signal chosen
+## Emitida solo en modo "door_pick", en vez de `chosen` (Main necesita saber
+## QUÉ puerta se eligió, no solo que se eligió algo).
+signal door_chosen(side: String)
 
 var _player: CharacterBody2D
+## Lado -> id de sala destino, guardado por show_choices() en modo
+## "door_pick" (ver RoomData.doors). Solo se usa dentro de ese modo.
+var _doors: Dictionary = {}
+
+const DOOR_LABELS: Dictionary = {"east": "Puerta Este", "west": "Puerta Oeste"}
+## Orden fijo de recorrido para que "Este" siempre aparezca antes que "Oeste"
+## sin depender del orden de inserción del Dictionary de la sala.
+const DOOR_SIDE_ORDER: Array[String] = ["east", "west"]
 
 @onready var _buttons_container: VBoxContainer = $Panel/Root/VBoxContainer
 @onready var _title: Label = $Panel/Root/Title
@@ -11,10 +22,13 @@ func _ready() -> void:
 	hide()
 
 ## mode: "weapon_pick" (elección inicial, cuchillo vs hacha), "milestone"
-## (cada MILESTONE_EVERY oleadas: subir de nivel vs arma nueva), o "upgrade"
-## (mejoras normales del árbol, filtradas por el arma equipada).
-func show_choices(player: CharacterBody2D, mode: String = "upgrade") -> void:
+## (cada MILESTONE_EVERY oleadas: subir de nivel vs arma nueva), "upgrade"
+## (mejoras normales del árbol, filtradas por el arma equipada), o
+## "door_pick" (fin de sala con 2 puertas: elegir por cuál seguir; `doors`
+## trae el mapeo lado->sala destino de RoomData, ver Main._open_room_doors).
+func show_choices(player: CharacterBody2D, mode: String = "upgrade", doors: Dictionary = {}) -> void:
 	_player = player
+	_doors = doors
 
 	for child in _buttons_container.get_children():
 		child.queue_free()
@@ -26,9 +40,21 @@ func show_choices(player: CharacterBody2D, mode: String = "upgrade") -> void:
 		"milestone":
 			_title.text = "¡Hito! Elegí un arma nueva o mejorá la que tenés"
 			_show_milestone_choices()
+		"door_pick":
+			_title.text = "¡Sala despejada! Elegí por dónde seguir"
+			_show_door_pick_choices()
 		_:
 			_title.text = "¡Oleada superada! Elegí una mejora:"
 			_show_upgrade_choices()
+
+func _show_door_pick_choices() -> void:
+	for side in DOOR_SIDE_ORDER:
+		if not _doors.has(side):
+			continue
+		var btn := _make_card_button(null, Rect2(), DOOR_LABELS[side], "Cruzá para continuar por este camino")
+		btn.pressed.connect(_on_door_picked.bind(side))
+		_buttons_container.add_child(btn)
+	show()
 
 func _show_weapon_pick_choices() -> void:
 	for weapon_id in WeaponData.MELEE_IDS:
@@ -126,6 +152,10 @@ func _make_card_button(icon_tex: Texture2D, icon_region: Rect2, title: String, d
 	vbox.add_child(desc_label)
 
 	return btn
+
+func _on_door_picked(side: String) -> void:
+	hide()
+	door_chosen.emit(side)
 
 func _on_weapon_picked(weapon_id: String, level: int) -> void:
 	_player.equip_weapon(weapon_id, level)
