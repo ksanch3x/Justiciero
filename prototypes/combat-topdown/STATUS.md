@@ -132,7 +132,10 @@ distintas en `Enemies/Tiles/`, una por fila del grid 4x4):
 - **Runner** (`Runner.gd extends Enemy.gd`, fila 1 = marrón orejas moradas):
   más rápido, menos vida/daño. Desde oleada 2.
 - **Spitter** (`Spitter.gd`, script propio, fila 0 = turquesa con púas):
-  se acerca lento y dispara al estar en rango (`shoot_range=220px`,
+  máquina de estados PATROL/ALERT/CHASE (mismo criterio que `Enemy.gd`,
+  agregada en la misma pasada que le subió la resistencia a la policía —
+  antes perseguía/disparaba desde el instante en que spawneaba). Dentro de
+  CHASE se acerca lento y dispara al estar en rango (`shoot_range=220px`,
   `fire_rate=1.4s`), **no hace kiting** (no retrocede). Vida baja (2), sin
   daño de contacto. Desde oleada 3. Sus balas usan
   `collision_layer=16` ("enemy_bullet", nueva capa) vía `Bullet.target_mask`
@@ -265,6 +268,14 @@ propósito, ver comentarios en el archivo).
 - Física: `collision_layer=2`/`mask=10`, igual que `Enemy.tscn` — comparte
   layer con los enemigos a propósito para que las balas del jugador
   (`target_mask=2`) le hagan daño sin cambiar `Bullet.gd`.
+- **Stats deliberadamente más duros que un Grunt** (feedback directo tras
+  la primera prueba jugada: "la policía debería ser más resistente y
+  difícil" — con 4 de vida moría casi de un golpe): `max_health=15`
+  (Grunt base=3), `contact_damage=3` (Grunt base=1), `speed=95`
+  (Grunt base=90), `attack_interval=0.85` (ataca más seguido que el
+  Grunt). Se supone que un policía es una amenaza real, no un enemigo de
+  oleada más — el jugador tiene la opción de bajar la Alerta rompiendo
+  línea de visión en vez de tener que pelearlo siempre.
 - **Sprite**: el pack de enemigos no tiene una 5ta fila libre (las 4 ya
   están usadas: Spitter/Runner/Grunt/Jefe) — se reusan los mismos tiles del
   Jugador (`Players/Tiles/tile_0008-0010`) con `modulate` azul, que es

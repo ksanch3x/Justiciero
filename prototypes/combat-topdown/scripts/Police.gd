@@ -10,12 +10,16 @@ extends CharacterBody2D
 ## hace daño de contacto igual que un enemigo común.
 enum State { PATROL, INVESTIGATE, PURSUE, ATTACK }
 
-@export var speed: float = 85.0
+@export var speed: float = 95.0
 @export var patrol_speed: float = 40.0
-@export var max_health: int = 4
-@export var contact_damage: int = 1
+## Bastante más duro que un Grunt base (max_health=3): un policía debería
+## sentirse como una amenaza real, no como un enemigo de oleada más — el
+## jugador puede reducir Alerta rompiendo línea de visión en vez de tener
+## que pelear siempre.
+@export var max_health: int = 15
+@export var contact_damage: int = 3
 @export var contact_range: float = 22.0
-@export var attack_interval: float = 1.0
+@export var attack_interval: float = 0.85
 @export var attack_telegraph_time: float = 0.3
 @export var patrol_radius: float = 90.0
 ## Cuánto se queda "mirando alrededor" en el punto de ruido antes de
