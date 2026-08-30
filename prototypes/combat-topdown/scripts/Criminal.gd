@@ -30,6 +30,10 @@ enum State { PATROL, DEFEND, FIGHT_RIVAL, FLEE }
 @export var flee_speed: float = 130.0
 @export var flee_time: float = 3.0
 @export var flee_health_ratio: float = 0.3
+## Cono de visión real (mismo criterio que Enemy.gd) para detectar al
+## jugador — no aplica al encuentro con Policía, ese sigue siendo por
+## radio de cercanía (FIGHT_RIVAL no es sigilo, es un choque de facciones).
+@export var view_angle: float = 100.0
 
 var health: int
 var _player: Node2D
@@ -37,6 +41,7 @@ var _state: State = State.PATROL
 var _spawn_position: Vector2
 var _spawn_captured: bool = false
 var _patrol_target: Vector2
+var _facing: Vector2 = Vector2.DOWN
 var _attack_timer: float = 0.0
 var _telegraphing: bool = false
 var _telegraph_time_left: float = 0.0
@@ -96,9 +101,7 @@ func _physics_process(delta: float) -> void:
 
 	match _state:
 		State.PATROL:
-			# GDD 2.3, cobertura activa — ver comentario largo en Enemy.gd.
-			var hidden: bool = _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position)
-			if dist_to_player <= detection_range and not hidden:
+			if _can_see_player(dist_to_player, to_player):
 				_state = State.DEFEND
 			else:
 				_process_patrol()
@@ -123,8 +126,11 @@ func _physics_process(delta: float) -> void:
 
 	var chasing: bool = _state == State.DEFEND or _state == State.FIGHT_RIVAL
 	var facing: Vector2 = to_target if chasing else velocity
+	if facing.length() > 1.0:
+		_facing = facing.normalized()
 	if abs(facing.x) > 1.0:
 		_anim.flip_h = facing.x < 0.0
+	queue_redraw()
 
 	_attack_timer -= delta
 
@@ -144,6 +150,17 @@ func _physics_process(delta: float) -> void:
 		_telegraphing = true
 		_telegraph_time_left = attack_telegraph_time
 		Fx.telegraph_attack(_anim, attack_telegraph_time)
+
+## Cono de visión real — ver comentario largo en Enemy.gd.
+func _can_see_player(dist_to_player: float, to_player: Vector2) -> bool:
+	if dist_to_player > detection_range:
+		return false
+	if _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position):
+		return false
+	if dist_to_player < 1.0:
+		return true
+	var half_angle: float = deg_to_rad(view_angle / 2.0)
+	return abs(_facing.angle_to(to_player)) <= half_angle
 
 func _process_patrol() -> void:
 	var to_target: Vector2 = _patrol_target - global_position
@@ -174,6 +191,8 @@ func _process_flee(delta: float) -> void:
 	_flee_timer -= delta
 	velocity = _flee_dir * flee_speed
 	move_and_slide()
+	queue_redraw()  # _draw() no pinta nada en FLEE, pero hay que refrescar
+	# para que el cono de antes de huir no quede pegado en pantalla.
 	if _flee_timer <= 0.0:
 		_state = State.PATROL
 		_pick_patrol_target()
@@ -221,3 +240,25 @@ func knockout() -> void:
 	health_changed.emit(health, max_health)
 	knocked_out.emit()
 	Fx.play_death(self, _anim)
+
+## Debug visual del cono de visión — ver comentario largo en Enemy.gd.
+## Naranja/rojizo en vez del verde/amarillo/rojo de Enemy.gd para que se
+## distinga a simple vista de qué facción es el cono (Criminal vs Grunt).
+func _draw() -> void:
+	var color: Color
+	match _state:
+		State.PATROL:
+			color = Color(1.0, 0.6, 0.2, 0.13)
+		State.DEFEND, State.FIGHT_RIVAL:
+			color = Color(1.0, 0.2, 0.2, 0.18)
+		_:
+			return
+	var dir: Vector2 = _facing if _facing.length() > 0.01 else Vector2.DOWN
+	var base_angle: float = dir.angle()
+	var half: float = deg_to_rad(view_angle / 2.0)
+	var steps: int = 14
+	var points: PackedVector2Array = [Vector2.ZERO]
+	for i in range(steps + 1):
+		var a: float = base_angle - half + (2.0 * half) * (float(i) / float(steps))
+		points.append(Vector2(cos(a), sin(a)) * detection_range)
+	draw_colored_polygon(points, color)

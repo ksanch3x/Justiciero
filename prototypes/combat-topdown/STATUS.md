@@ -147,10 +147,17 @@ distintas en `Enemies/Tiles/`, una por fila del grid 4x4):
 `games/justiciero/`, sección 6 — primer paso hacia la IA de facciones):
 `enum State { PATROL, ALERT, CHASE, ATTACK }`.
 - **PATROL**: camina a `patrol_speed` entre puntos aleatorios dentro de
-  `patrol_radius` de su posición de spawn. Pasa a ALERT si el jugador entra
-  en `detection_range` (260px por defecto) — detección circular por
-  distancia, no hay cono de visión/raycast todavía (el GDD lo marca
-  explícitamente como el approach de MVP en su sección 5.1).
+  `patrol_radius` de su posición de spawn. Pasa a ALERT vía
+  `_can_see_player()`: cono de visión real (no el círculo por distancia
+  del MVP original del GDD 5.1) — dentro de `detection_range` (260px), Y
+  dentro de `view_angle` (100° por defecto, centrado en `_facing`, la
+  última dirección hacia donde caminó/miró), Y sin cobertura bloqueando
+  (`Player.is_hidden_from()`, GDD 2.3). Un enemigo mirando para otro lado
+  ya no detecta al jugador parado justo detrás suyo. Se dibuja como debug
+  visual (`_draw()`/`queue_redraw()` cada frame): verde en PATROL, amarillo
+  en ALERT, rojo en CHASE/ATTACK — agregado a pedido explícito del usuario
+  ("ocupo objetos que ayuden a probar sigilo, conos de visión") para poder
+  ver y no solo confiar en la lógica.
 - **ALERT**: se queda quieto `alert_time` (0.4s, el "signo de exclamación")
   antes de pasar a CHASE. Si el jugador se aleja más de `lose_track_range`
   (340px, a propósito mayor que `detection_range` para evitar oscilar en el
@@ -163,9 +170,13 @@ distintas en `Enemies/Tiles/`, una por fila del grid 4x4):
   `contact_range`.
 - Recibir daño saca de PATROL/ALERT directo a CHASE (`take_damage()`) —
   golpe por sorpresa siempre alerta al enemigo, sin depender de distancia.
-- Runner.gd hereda todo esto sin cambios (solo pisa stats). Spitter.gd
-  **no** se tocó — sigue con su lógica propia de acercarse+disparar sin
-  patrulla ni estados.
+- Runner.gd hereda todo esto sin cambios (solo pisa stats). Spitter.gd y
+  Criminal.gd tienen su propia copia de `_can_see_player()`/`_draw()`
+  (mismo criterio, GDScript no tiene mixins) — Criminal.gd usa cono
+  naranja en PATROL en vez de verde, para distinguirlo a simple vista del
+  cono de un Grunt. Police.gd **no** tiene cono — su persecución depende
+  del Nivel de Alerta (ruido), no de ver al jugador directamente, así que
+  un cono ahí sería engañoso.
 - El jefe (`Main._spawn_boss()`) pisa `detection_range`/`lose_track_range`
   a 2000 para que arranque persiguiendo de inmediato, sin patrulla — no
   tendría sentido un jefe vagando en su propia sala.
@@ -213,6 +224,12 @@ comentario en `Main._pick_enemy_scene()`).
 - `Camera2D` del jugador (`Player.tscn`) tiene límites
   (`limit_left/right/top/bottom = ∓490/∓360`) ajustados a la arena + el
   grosor de pared, para que nunca se vea el vacío fuera del área jugable.
+  Sigue al jugador siempre (es hija de `Player`, se mueve con él) —
+  `position_smoothing_enabled=true`/`speed=8.0` agregado para que no sea
+  un snap instantáneo. **Los límites siguen siendo globales y fijos** —
+  para salas más grandes/asimétricas que las 900x640 actuales, van a
+  necesitar calcularse por sala (bounding box de la unión de rectángulos
+  activa) en vez de este valor único hardcodeado.
 - Props sólidos (`Main.tscn`, nodo `Props`): 2 cactus, 2 rocas/huesos, 1
   formación rocosa — `StaticBody2D`, `collision_layer=8`. Bloquean a
   jugador/enemigos (ambos tienen `collision_mask=8`). Posiciones sin cambios

@@ -1,10 +1,17 @@
 extends CharacterBody2D
 
 ## Máquina de estados básica (GDD sección 5.1 / hoja de ruta Fase 2):
-## Patrulla -> Alerta -> Persecución -> Ataque. Detección circular por
-## distancia (GDD 5.1: "Área2D circular para el MVP"; cono de visión real
-## con raycasts queda para después). Sin estado de Huida todavía — no lo
-## pide ningún enemigo actual, se agrega cuando haga falta.
+## Patrulla -> Alerta -> Persecución -> Ataque. Sin estado de Huida
+## todavía — no lo pide ningún enemigo actual, se agrega cuando haga
+## falta.
+##
+## Detección = cono de visión real (ángulo + rango + cobertura), no un
+## círculo por distancia — GDD 5.1 lo marcaba como mejora post-MVP, pero
+## sin esto no hay forma de PROBAR sigilo de verdad (todo lo que esté
+## dentro del radio se detectaba, mirase donde mirase el enemigo). Se
+## dibuja como debug visual (_draw(), ver al final del archivo) para
+## poder ver el cono jugando: verde en PATROL, amarillo en ALERT, rojo en
+## CHASE/ATTACK.
 enum State { PATROL, ALERT, CHASE, ATTACK }
 
 @export var speed: float = 90.0
@@ -31,6 +38,9 @@ enum State { PATROL, ALERT, CHASE, ATTACK }
 ## Demora entre detectar al jugador (PATROL) y arrancar la persecución de
 ## verdad (CHASE) — el "signo de exclamación" de la alerta.
 @export var alert_time: float = 0.4
+## Ancho total del cono de visión, en grados, centrado en hacia dónde
+## mira/camina el enemigo.
+@export var view_angle: float = 100.0
 
 var health: int
 var _player: Node2D
@@ -43,6 +53,11 @@ var _spawn_position: Vector2
 var _spawn_captured: bool = false
 var _patrol_target: Vector2
 var _alert_time_left: float = 0.0
+## Última dirección "hacia donde mira" conocida (se actualiza cada frame en
+## _physics_process, igual que el flip_h del sprite) — el cono de visión
+## se dibuja centrado en esto, no en la velocidad cruda (que es cero en
+## varios estados parado).
+var _facing: Vector2 = Vector2.DOWN
 
 signal died
 ## Emitida en take_damage() (tanto en daño normal como en el golpe que mata,
@@ -80,7 +95,7 @@ func _physics_process(delta: float) -> void:
 	var to_player: Vector2 = _player.global_position - global_position
 	var dist_to_player: float = to_player.length()
 
-	_update_state(delta, dist_to_player)
+	_update_state(delta, dist_to_player, to_player)
 
 	match _state:
 		State.PATROL:
@@ -94,8 +109,11 @@ func _physics_process(delta: float) -> void:
 	# Mientras patrulla mira hacia donde camina; en cualquier otro estado ya
 	# detectó al jugador y mira hacia él (incluso parado en ALERT/ATTACK).
 	var facing: Vector2 = velocity if _state == State.PATROL else to_player
+	if facing.length() > 1.0:
+		_facing = facing.normalized()
 	if abs(facing.x) > 1.0:
 		_anim.flip_h = facing.x < 0.0
+	queue_redraw()
 
 	_attack_timer -= delta
 
@@ -115,15 +133,10 @@ func _physics_process(delta: float) -> void:
 
 ## Transiciones de la máquina de estados. Separado de _physics_process para
 ## que el chequeo de estado no se mezcle con el movimiento/telegraph.
-func _update_state(delta: float, dist_to_player: float) -> void:
+func _update_state(delta: float, dist_to_player: float, to_player: Vector2) -> void:
 	match _state:
 		State.PATROL:
-			# GDD 2.3, cobertura activa: si el jugador está escondido detrás de
-			# un obstáculo real (Player.is_hidden_from), no se detecta aunque
-			# esté dentro del radio. has_method por las dudas si algún día
-			# _player no es un Player.gd de verdad.
-			var hidden: bool = _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position)
-			if dist_to_player <= detection_range and not hidden:
+			if _can_see_player(dist_to_player, to_player):
 				_state = State.ALERT
 				_alert_time_left = alert_time
 		State.ALERT:
@@ -142,6 +155,20 @@ func _update_state(delta: float, dist_to_player: float) -> void:
 		State.ATTACK:
 			if dist_to_player > contact_range:
 				_state = State.CHASE
+
+## Cono de visión real: dentro de rango, dentro del ángulo de view_angle
+## centrado en _facing, y sin cobertura bloqueando (GDD 2.3). Reemplaza el
+## viejo chequeo puramente circular — un enemigo mirando para otro lado ya
+## no detecta al jugador parado justo detrás suyo.
+func _can_see_player(dist_to_player: float, to_player: Vector2) -> bool:
+	if dist_to_player > detection_range:
+		return false
+	if _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position):
+		return false
+	if dist_to_player < 1.0:
+		return true
+	var half_angle: float = deg_to_rad(view_angle / 2.0)
+	return abs(_facing.angle_to(to_player)) <= half_angle
 
 func _process_patrol() -> void:
 	var to_target: Vector2 = _patrol_target - global_position
@@ -181,3 +208,29 @@ func knockout() -> void:
 	health_changed.emit(health, max_health)
 	knocked_out.emit()
 	Fx.play_death(self, _anim)
+
+## Debug visual del cono de visión — verde en PATROL (todavía no vio nada),
+## amarillo en ALERT (te vio, viene el "signo de exclamación"), rojo en
+## CHASE/ATTACK (ya sabe dónde estás). Dibujado en espacio local del nodo
+## (CharacterBody2D no rota, solo su sprite se flipea), así que el cono se
+## arma con trigonometría simple sobre _facing en vez de depender de la
+## rotación del nodo.
+func _draw() -> void:
+	var color: Color
+	match _state:
+		State.PATROL:
+			color = Color(0.3, 1.0, 0.3, 0.13)
+		State.ALERT:
+			color = Color(1.0, 0.9, 0.2, 0.16)
+		_:
+			color = Color(1.0, 0.2, 0.2, 0.18)
+
+	var dir: Vector2 = _facing if _facing.length() > 0.01 else Vector2.DOWN
+	var base_angle: float = dir.angle()
+	var half: float = deg_to_rad(view_angle / 2.0)
+	var steps: int = 14
+	var points: PackedVector2Array = [Vector2.ZERO]
+	for i in range(steps + 1):
+		var a: float = base_angle - half + (2.0 * half) * (float(i) / float(steps))
+		points.append(Vector2(cos(a), sin(a)) * detection_range)
+	draw_colored_polygon(points, color)

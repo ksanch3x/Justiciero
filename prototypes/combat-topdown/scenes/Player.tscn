@@ -64,3 +64,5 @@ limit_left = -490
 limit_top = -360
 limit_right = 490
 limit_bottom = 360
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0

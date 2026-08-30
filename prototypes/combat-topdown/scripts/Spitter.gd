@@ -23,12 +23,13 @@ enum State { PATROL, ALERT, CHASE }
 @export var bullet_scene: PackedScene = preload("res://scenes/Bullet.tscn")
 @export var bullet_speed: float = 380.0
 @export var bullet_damage: int = 1
-## Mismo criterio que Enemy.gd: detección circular por distancia, sin cono
-## de visión todavía.
+## Cono de visión real (mismo criterio que Enemy.gd) en vez de círculo por
+## distancia — ver _can_see_player().
 @export var detection_range: float = 260.0
 @export var lose_track_range: float = 340.0
 @export var patrol_radius: float = 80.0
 @export var alert_time: float = 0.4
+@export var view_angle: float = 100.0
 
 ## Layer física de las balas enemigas ("enemy_bullet"), separada de la
 ## layer=4 que usan las balas del jugador para no chocar entre sí.
@@ -44,6 +45,7 @@ var _spawn_position: Vector2
 var _spawn_captured: bool = false
 var _patrol_target: Vector2
 var _alert_time_left: float = 0.0
+var _facing: Vector2 = Vector2.DOWN
 
 signal died
 ## GDD 2.3, letal vs. no letal — ver comentario largo en Enemy.gd.
@@ -72,7 +74,7 @@ func _physics_process(delta: float) -> void:
 	var to_player: Vector2 = _player.global_position - global_position
 	var dist: float = to_player.length()
 
-	_update_state(delta, dist)
+	_update_state(delta, dist, to_player)
 
 	match _state:
 		State.PATROL:
@@ -84,8 +86,11 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	var facing: Vector2 = velocity if _state == State.PATROL else to_player
+	if facing.length() > 1.0:
+		_facing = facing.normalized()
 	if abs(facing.x) > 1.0:
 		_anim.flip_h = facing.x < 0.0
+	queue_redraw()
 
 	if _state != State.CHASE:
 		return
@@ -101,12 +106,10 @@ func _physics_process(delta: float) -> void:
 		_shoot(to_player.normalized())
 		_fire_timer = fire_rate
 
-func _update_state(delta: float, dist_to_player: float) -> void:
+func _update_state(delta: float, dist_to_player: float, to_player: Vector2) -> void:
 	match _state:
 		State.PATROL:
-			# GDD 2.3, cobertura activa — ver comentario largo en Enemy.gd.
-			var hidden: bool = _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position)
-			if dist_to_player <= detection_range and not hidden:
+			if _can_see_player(dist_to_player, to_player):
 				_state = State.ALERT
 				_alert_time_left = alert_time
 		State.ALERT:
@@ -120,6 +123,17 @@ func _update_state(delta: float, dist_to_player: float) -> void:
 			if dist_to_player > lose_track_range:
 				_state = State.ALERT
 				_alert_time_left = alert_time
+
+## Cono de visión real — ver comentario largo en Enemy.gd.
+func _can_see_player(dist_to_player: float, to_player: Vector2) -> bool:
+	if dist_to_player > detection_range:
+		return false
+	if _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position):
+		return false
+	if dist_to_player < 1.0:
+		return true
+	var half_angle: float = deg_to_rad(view_angle / 2.0)
+	return abs(_facing.angle_to(to_player)) <= half_angle
 
 func _process_patrol() -> void:
 	var to_target: Vector2 = _patrol_target - global_position
@@ -162,3 +176,23 @@ func knockout() -> void:
 	health = 0
 	knocked_out.emit()
 	Fx.play_death(self, _anim)
+
+## Debug visual del cono de visión — ver comentario largo en Enemy.gd.
+func _draw() -> void:
+	var color: Color
+	match _state:
+		State.PATROL:
+			color = Color(0.3, 1.0, 0.3, 0.13)
+		State.ALERT:
+			color = Color(1.0, 0.9, 0.2, 0.16)
+		_:
+			color = Color(1.0, 0.2, 0.2, 0.18)
+	var dir: Vector2 = _facing if _facing.length() > 0.01 else Vector2.DOWN
+	var base_angle: float = dir.angle()
+	var half: float = deg_to_rad(view_angle / 2.0)
+	var steps: int = 14
+	var points: PackedVector2Array = [Vector2.ZERO]
+	for i in range(steps + 1):
+		var a: float = base_angle - half + (2.0 * half) * (float(i) / float(steps))
+		points.append(Vector2(cos(a), sin(a)) * detection_range)
+	draw_colored_polygon(points, color)
