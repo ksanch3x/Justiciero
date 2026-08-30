@@ -242,6 +242,10 @@ func _on_enemy_died() -> void:
 ## para esta primera versión.
 func _spawn_police() -> void:
 	var police := police_scene.instantiate()
+	# GDD 2.5: matar policías sube la Notoriedad persistente (a diferencia
+	# del Nivel de Alerta de FactionManager, que es por misión). Sin
+	# no-letal implementado todavía (GDD 2.3), cualquier muerte cuenta.
+	police.died.connect(SaveManager.add_police_kill)
 	add_child(police)
 	police.global_position = Vector2(-350, -260)
 
@@ -498,11 +502,13 @@ func _update_hud() -> void:
 		else:
 			ammo_text = "   Munición: %d/%d" % [_player.current_ammo, _player.current_mag_size]
 
-	# Nivel de Alerta a la vista mientras no hay policía real que reaccione
-	# (ver FactionManager.gd) — permite probar que sube/decae bien.
+	# Nivel de Alerta (por misión) + Notoriedad (persistente entre
+	# corridas, GDD 2.5) — visibles para poder probar que ambas se
+	# comportan bien mientras todavía no hay UI de Hub que las muestre.
 	var alert_text: String = "   Alerta: %s" % FactionManager.level_name()
+	var notoriety_text: String = "   Notoriedad: %d" % SaveManager.notoriety
 
-	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text, alert_text]
+	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text, alert_text, notoriety_text]
 
 # ---------------------------------------------------------------------------
 # UI kit del pack (barra de vida del jefe, menú principal) — ver STATUS.md

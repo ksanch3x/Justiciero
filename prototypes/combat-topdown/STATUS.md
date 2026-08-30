@@ -275,6 +275,33 @@ propósito, ver comentarios en el archivo).
   ver `RoomData.gd`) — simplificación deliberada de esta primera versión,
   no hay refuerzos ni bloqueo de salidas (GDD Nivel 3 "Bloqueo") todavía.
 
+### Notoriedad (`scripts/SaveManager.gd`, autoload)
+GDD 2.5 — la stat que SÍ persiste entre corridas, a diferencia del Nivel de
+Alerta de `FactionManager.gd` (que es por misión y siempre arranca en 0).
+Solo Notoriedad por ahora; Reputación (GDD 2.4) y el resto del guardado
+quedan para cuando exista el Árbol de Habilidades permanente de verdad —
+no tiene sentido persistir un stat sin nada que lo lea.
+- Guardado real en `user://justiciero_save.cfg` vía `ConfigFile` (persiste
+  entre ejecuciones del juego, no solo entre reinicios de escena con `R`).
+- Sube 1 punto por cada policía muerto por el jugador
+  (`Main._spawn_police()` conecta `police.died` a
+  `SaveManager.add_police_kill()`), con techo provisorio de 20 — el GDD
+  deja el techo/tiers reales explícitamente **[Pendiente]**, este valor es
+  solo para que no crezca sin límite mientras tanto. Sin distinción
+  letal/no-letal todavía (GDD 2.3 pendiente), así que cualquier muerte de
+  un `Police.gd` cuenta como "matar".
+- **Efecto en incursiones futuras** (GDD 2.5: "sube el nivel base de
+  Alerta"): `FactionManager.reset()` ya no arranca el medidor en 0 seco —
+  arranca en `notoriety * 1.5` (`FactionManager.NOTORIETY_METER_FACTOR`),
+  así que con Notoriedad alta el mundo empieza más caliente en la próxima
+  corrida. El Nivel de Alerta en sí sigue siendo por misión — Notoriedad
+  solo cambia dónde arranca ese medidor, no si persiste.
+- **Sin mecanismo de reducción en el Hub todavía** — el GDD mismo lo deja
+  [Pendiente] (pagar con Dinero vs. misión de "bajo perfil" vs. ambas), y
+  no hay Hub construido todavía para alojar esa decisión.
+- Visible en el HUD (`Main._update_hud()`, sufijo `"Notoriedad: N"`), igual
+  que Alerta, solo para poder probar que sube y persiste entre corridas.
+
 - **Jugo visual sin audio** (`scripts/Fx.gd`, autoload): `flash_damage(sprite)`
   (tween de `modulate` rojo-blanco al recibir daño) y
   `play_death(node, sprite)` (tween de escala x1.4 + fade antes de

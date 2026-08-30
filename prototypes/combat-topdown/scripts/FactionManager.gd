@@ -68,15 +68,18 @@ func _recompute_level() -> void:
 		level = new_level
 		level_changed.emit(level, old_level)
 
-## Reinicia el medidor a 0 — llamar al empezar una incursión nueva (el
-## Nivel de Alerta es por misión, GDD 2.2, no persiste como Notoriedad).
+## Cuánto sube el piso del medidor por cada punto de Notoriedad acumulada
+## (GDD 2.5: "sube el nivel base de Alerta... en incursiones futuras").
+const NOTORIETY_METER_FACTOR: float = 1.5
+
+## Reinicia el medidor al piso que corresponde por Notoriedad persistente
+## (0 si nunca mataste un policía) — llamar al empezar una incursión nueva.
+## El Nivel de Alerta en sí sigue siendo por misión (GDD 2.2); lo único que
+## Notoriedad cambia es dónde arranca ese medidor, no si persiste.
 func reset() -> void:
-	meter = 0.0
+	meter = min(100.0, float(SaveManager.notoriety) * NOTORIETY_METER_FACTOR)
 	_hold_timer = 0.0
-	if level != AlertLevel.IGNORED:
-		var old_level: int = level
-		level = AlertLevel.IGNORED
-		level_changed.emit(level, old_level)
+	_recompute_level()
 
 func level_name() -> String:
 	return LEVEL_NAMES[level]
