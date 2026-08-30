@@ -4,6 +4,7 @@ extends Node2D
 @export var spitter_scene: PackedScene = preload("res://scenes/Spitter.tscn")
 @export var runner_scene: PackedScene = preload("res://scenes/Runner.tscn")
 @export var police_scene: PackedScene = preload("res://scenes/Police.tscn")
+@export var criminal_scene: PackedScene = preload("res://scenes/Criminal.tscn")
 
 ## Sprite del jefe: fila sin usar hasta ahora del pack (fila 3, "morada"),
 ## ver STATUS.md sección "Mapa de assets". Son tiles 24x24 completos, igual
@@ -119,6 +120,7 @@ func _ready() -> void:
 
 	_apply_room(RoomData.get_room(current_room_id))
 	_spawn_police()
+	_spawn_criminals()
 
 	# Menú principal primero (bloquea _process igual que _choosing_upgrade):
 	# recién al tocar "Jugar" arranca la pantalla de elegir arma inicial.
@@ -248,6 +250,18 @@ func _spawn_police() -> void:
 	police.died.connect(SaveManager.add_police_kill)
 	add_child(police)
 	police.global_position = Vector2(-350, -260)
+
+## Dos criminales patrullando desde el arranque — junto con el policía de
+## _spawn_police(), esto es lo mínimo para poder probar el Triángulo de
+## Facciones (GDD Fase 4/sección 0 "minuto de diversión"): que se detecten
+## entre sí y peleen sin que el jugador intervenga. Mismas simplificaciones
+## que _spawn_police(): fijos, no se reposicionan por sala.
+func _spawn_criminals() -> void:
+	var positions := [Vector2(300, -200), Vector2(320, 220)]
+	for pos in positions:
+		var criminal := criminal_scene.instantiate()
+		add_child(criminal)
+		criminal.global_position = pos
 
 func _show_upgrade_selection() -> void:
 	if _player.has_wave_regen and _player.health < _player.max_health:

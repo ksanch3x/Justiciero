@@ -286,6 +286,43 @@ propósito, ver comentarios en el archivo).
   ver `RoomData.gd`) — simplificación deliberada de esta primera versión,
   no hay refuerzos ni bloqueo de salidas (GDD Nivel 3 "Bloqueo") todavía.
 
+### Triángulo de Facciones (`scripts/Criminal.gd`, + peleas en `Police.gd`)
+Fase 4 / "minuto de diversión" (GDD sección 0 y 2.1) — Policía y Criminal
+ya se detectan y pelean entre sí sin que el jugador intervenga.
+- `Criminal.gd`: `enum State { PATROL, DEFEND, FIGHT_RIVAL, FLEE }`.
+  PATROL→DEFEND por distancia al jugador (`detection_range=220`,
+  `lose_track_range=300`, mismo criterio que `Enemy.gd` pero sin fase
+  ALERT intermedia — un criminal no tiene "signo de exclamación", ataca
+  directo). `Main._spawn_criminals()` pone 2 fijos, mismo criterio que
+  `_spawn_police()` (no se reposicionan por sala).
+- **Encuentro Policía↔Criminal**: cada uno busca al rival vivo más cercano
+  del grupo contrario (`"police"`/`"criminal"`) dentro de
+  `faction_detection_range=90` — chico a propósito, es un cruce
+  oportunista al patrullar/perseguir, no un imán que arrastra unidades de
+  todo el mapa (eso volvería la pelea demasiado frecuente y competiría con
+  perseguir al jugador). Prioridad: el jugador siempre gana — Policía no
+  abandona PURSUE/ATTACK por un Criminal cercano, Criminal no abandona
+  DEFEND por un Policía cercano.
+- **Regla anti-vaciado de misión** (feedback directo del usuario tras
+  probar: "hay que regular que no se maten fácilmente sino me quedo sin
+  misión"): `take_damage(amount, from_ai=false)` en ambos scripts — el
+  parámetro `from_ai` solo lo pasan Police.gd/Criminal.gd al pegarse entre
+  sí (`target.take_damage(contact_damage, true)`); Player._melee_attack(),
+  el dash, y Bullet.gd siguen llamando `take_damage(amount)` sin ese
+  parámetro (compatibilidad automática vía default `false`). Con
+  `from_ai=true`: nunca deja bajar `health` a 0 (`health = max(1, health)`)
+  y, por debajo de `flee_health_ratio` (30% de vida máxima), entra en
+  **FLEE** — huye en línea recta de la posición del rival por `flee_time`
+  (3s) en vez de seguir peleando. Solo el jugador puede matar de verdad a
+  un Policía o un Criminal; el Triángulo entre IAs nunca vacía el mapa por
+  sí solo.
+- Ambos comparten el grupo `"enemy"` (igual que Police.gd ya hacía) para
+  que el melee/dash del jugador los golpee sin tocar ese código, y
+  `Main.gd` sigue sin escanear ese grupo para las oleadas.
+- **Sprite**: mismo criterio que Police.gd (placeholder de color, GDD
+  sección 7 pregunta 11 — "seguir con placeholders por ahora") — reusa el
+  sprite del jugador con `modulate` rojo/carmesí en vez de azul.
+
 ### Notoriedad (`scripts/SaveManager.gd`, autoload)
 GDD 2.5 — la stat que SÍ persiste entre corridas, a diferencia del Nivel de
 Alerta de `FactionManager.gd` (que es por misión y siempre arranca en 0).
