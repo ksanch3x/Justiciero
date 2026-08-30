@@ -112,6 +112,10 @@ func _ready() -> void:
 	_upgrade_ui.chosen.connect(_on_upgrade_chosen)
 	_upgrade_ui.door_chosen.connect(_on_door_chosen)
 
+	# Nivel de Alerta es por misión (GDD 2.2) — arranca en 0 en cada corrida
+	# nueva, a diferencia de una futura Notoriedad persistente.
+	FactionManager.reset()
+
 	_apply_room(RoomData.get_room(current_room_id))
 
 	# Menú principal primero (bloquea _process igual que _choosing_upgrade):
@@ -481,7 +485,11 @@ func _update_hud() -> void:
 		else:
 			ammo_text = "   Munición: %d/%d" % [_player.current_ammo, _player.current_mag_size]
 
-	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text]
+	# Nivel de Alerta a la vista mientras no hay policía real que reaccione
+	# (ver FactionManager.gd) — permite probar que sube/decae bien.
+	var alert_text: String = "   Alerta: %s" % FactionManager.level_name()
+
+	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text, alert_text]
 
 # ---------------------------------------------------------------------------
 # UI kit del pack (barra de vida del jefe, menú principal) — ver STATUS.md

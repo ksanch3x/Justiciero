@@ -364,6 +364,10 @@ func _melee_attack() -> void:
 			enemy.global_position += push_dir * melee_knockback
 	_play_melee_lunge()
 	_start_shake(1.5)
+	# GDD 2.2: melee es silencioso comparado con las armas de fuego (sin
+	# sistema de testigos todavía, así que por ahora es un ruido chico
+	# plano en vez de "silencioso salvo testigo").
+	FactionManager.report_noise(FactionManager.NOISE_MELEE)
 
 ## Feedback visual simple: el sprite del arma se adelanta y vuelve.
 func _play_melee_lunge() -> void:
@@ -403,6 +407,8 @@ func _shoot_ranged() -> void:
 	if current_ammo <= 0:
 		_start_reload()
 	_start_shake(1.5)
+	# GDD 2.2: disparos = radio grande, casi siempre sube a Nivel 1 (Sospecha).
+	FactionManager.report_noise(FactionManager.NOISE_GUNSHOT)
 
 func _start_reload() -> void:
 	if is_reloading:

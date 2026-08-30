@@ -214,6 +214,31 @@ comentario en `Main._pick_enemy_scene()`).
   formación rocosa — `StaticBody2D`, `collision_layer=8`. Bloquean a
   jugador/enemigos (ambos tienen `collision_mask=8`). Posiciones sin cambios
   (ya caían dentro del nuevo límite, sin quedar pegadas a una pared).
+### Sistema de Alerta (`scripts/FactionManager.gd`, autoload)
+Fase 3 de la hoja de ruta del GDD (`games/justiciero/GDD.md`, sección 6) —
+**solo el medidor y las reglas de subida/decaimiento**, todavía no hay
+facción Policía real que reaccione a esto (siguiente paso). Registrado en
+`project.godot` `[autoload]` junto a `Fx`.
+- `enum AlertLevel { IGNORED, SUSPICION, CHASE, LOCKDOWN }` (GDD 2.2: 0
+  Ignorado / 1 Sospecha / 2 Persecución / 3 Bloqueo), derivado de un
+  medidor `meter: float` 0-100 vía `LEVEL_THRESHOLDS`.
+- `report_noise(amount)`: sube el medidor y reinicia un "hold" de
+  `decay_hold_time` (2.5s) antes de que empiece a decaer — si no, un solo
+  disparo se diluiría antes de que algo llegue a reaccionar.
+- Fuentes ya conectadas: `Player._melee_attack()` → `NOISE_MELEE` (6,
+  "silencioso" comparado con las armas de fuego), `Player._shoot_ranged()`
+  → `NOISE_GUNSHOT` (30, "casi siempre sube a Nivel 1"). **Sin testigos ni
+  radio físico todavía** — el GDD distingue "melee silencioso *si no hay
+  testigo*", acá es un valor plano hasta que haya detección real de
+  testigos. Vidrios/puertas/alarmas y cuerpos descubiertos (GDD 2.2) no
+  están implementados — no hay esas mecánicas en el prototipo todavía.
+- **Por misión**: `Main._ready()` llama `FactionManager.reset()` al
+  arrancar cada corrida — no confundir con una futura Notoriedad
+  persistente (GDD 2.5, no implementada).
+- Visible en el HUD (`Main._update_hud()`, sufijo `"Alerta: <nombre>"`) solo
+  para poder probar que sube/decae bien mientras no hay policía que lo
+  consuma de verdad.
+
 - **Jugo visual sin audio** (`scripts/Fx.gd`, autoload): `flash_damage(sprite)`
   (tween de `modulate` rojo-blanco al recibir daño) y
   `play_death(node, sprite)` (tween de escala x1.4 + fade antes de

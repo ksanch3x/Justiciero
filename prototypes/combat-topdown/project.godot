@@ -13,6 +13,7 @@ config/features=PackedStringArray("4.3", "GL Compatibility")
 [autoload]
 
 Fx="*res://scripts/Fx.gd"
+FactionManager="*res://scripts/FactionManager.gd"
 
 [input]
 
