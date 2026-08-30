@@ -49,6 +49,11 @@ signal died
 ## con health ya clampeado a 0) para que quien quiera una barra de vida
 ## (el jefe, ver Main._spawn_boss()) no tenga que leer `health` por polling.
 signal health_changed(current: int, max_health: int)
+## GDD 2.3, letal vs. no letal: knockout() (llamado por Player._process_
+## takedown()) emite ESTA señal en vez de `died` — a propósito distinta,
+## para que nada que dependa de "murió de verdad" (como SaveManager.
+## add_police_kill en Police.gd) se dispare con un noqueo.
+signal knocked_out
 
 @onready var _anim: AnimatedSprite2D = $Visual
 
@@ -113,7 +118,12 @@ func _physics_process(delta: float) -> void:
 func _update_state(delta: float, dist_to_player: float) -> void:
 	match _state:
 		State.PATROL:
-			if dist_to_player <= detection_range:
+			# GDD 2.3, cobertura activa: si el jugador está escondido detrás de
+			# un obstáculo real (Player.is_hidden_from), no se detecta aunque
+			# esté dentro del radio. has_method por las dudas si algún día
+			# _player no es un Player.gd de verdad.
+			var hidden: bool = _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position)
+			if dist_to_player <= detection_range and not hidden:
 				_state = State.ALERT
 				_alert_time_left = alert_time
 		State.ALERT:
@@ -159,3 +169,15 @@ func take_damage(amount: int) -> void:
 	# fuera del radio de detección (p.ej. golpeado por sorpresa desde atrás).
 	if _state == State.PATROL or _state == State.ALERT:
 		_state = State.CHASE
+
+## GDD 2.3: neutraliza sin matar (ver comentario de la señal knocked_out).
+## Simplificación de prototipo: visualmente es el mismo Fx.play_death y el
+## nodo desaparece igual que al morir — la diferencia es 100% semántica
+## (qué señal se emite), no hay cuerpo persistente "noqueado" todavía.
+func knockout() -> void:
+	if health <= 0:
+		return
+	health = 0
+	health_changed.emit(health, max_health)
+	knocked_out.emit()
+	Fx.play_death(self, _anim)

@@ -46,6 +46,8 @@ var _flee_dir: Vector2 = Vector2.ZERO
 
 signal died
 signal health_changed(current: int, max_health: int)
+## GDD 2.3, letal vs. no letal — ver comentario largo en Police.gd/Enemy.gd.
+signal knocked_out
 
 @onready var _anim: AnimatedSprite2D = $Visual
 
@@ -94,7 +96,9 @@ func _physics_process(delta: float) -> void:
 
 	match _state:
 		State.PATROL:
-			if dist_to_player <= detection_range:
+			# GDD 2.3, cobertura activa — ver comentario largo en Enemy.gd.
+			var hidden: bool = _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position)
+			if dist_to_player <= detection_range and not hidden:
 				_state = State.DEFEND
 			else:
 				_process_patrol()
@@ -208,3 +212,12 @@ func take_damage(amount: int, from_ai: bool = false) -> void:
 	Fx.flash_damage(_anim)
 	if _state == State.PATROL:
 		_state = State.DEFEND
+
+## GDD 2.3: neutraliza sin matar — ver comentario de la señal knocked_out.
+func knockout() -> void:
+	if health <= 0:
+		return
+	health = 0
+	health_changed.emit(health, max_health)
+	knocked_out.emit()
+	Fx.play_death(self, _anim)

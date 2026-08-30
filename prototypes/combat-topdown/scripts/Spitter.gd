@@ -46,6 +46,8 @@ var _patrol_target: Vector2
 var _alert_time_left: float = 0.0
 
 signal died
+## GDD 2.3, letal vs. no letal — ver comentario largo en Enemy.gd.
+signal knocked_out
 
 @onready var _anim: AnimatedSprite2D = $Visual
 
@@ -102,7 +104,9 @@ func _physics_process(delta: float) -> void:
 func _update_state(delta: float, dist_to_player: float) -> void:
 	match _state:
 		State.PATROL:
-			if dist_to_player <= detection_range:
+			# GDD 2.3, cobertura activa — ver comentario largo en Enemy.gd.
+			var hidden: bool = _player.has_method("is_hidden_from") and _player.is_hidden_from(global_position)
+			if dist_to_player <= detection_range and not hidden:
 				_state = State.ALERT
 				_alert_time_left = alert_time
 		State.ALERT:
@@ -150,3 +154,11 @@ func take_damage(amount: int) -> void:
 	# Golpe por sorpresa alerta de inmediato, igual que en Enemy.gd/Police.gd.
 	if _state == State.PATROL or _state == State.ALERT:
 		_state = State.CHASE
+
+## GDD 2.3: neutraliza sin matar — ver comentario largo en Enemy.gd.
+func knockout() -> void:
+	if health <= 0:
+		return
+	health = 0
+	knocked_out.emit()
+	Fx.play_death(self, _anim)

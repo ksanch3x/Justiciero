@@ -323,6 +323,48 @@ ya se detectan y pelean entre sí sin que el jugador intervenga.
   sección 7 pregunta 11 — "seguir con placeholders por ahora") — reusa el
   sprite del jugador con `modulate` rojo/carmesí en vez de azul.
 
+### Cobertura activa + letal/no letal (GDD 2.3)
+Dos inputs nuevos en `project.godot` (`cover`=C/joypad9,
+`takedown`=F/joypad2), agregados junto a los ya existentes
+(`move_*`/`shoot`/`dash`).
+
+**Cobertura** (`Player.gd`): `in_cover` es `true` solo mientras se mantiene
+`cover` presionado Y el jugador no se está moviendo (`input_vec` casi cero)
+Y no está dasheando — se recalcula cada frame en `_physics_process`, sin
+estado "pegado". `Player.is_hidden_from(observer_pos)` es lo que de verdad
+importa: además de `in_cover`, tira un raycast físico
+(`PhysicsRayQueryParameters2D`, `collision_mask=8` = Props/paredes) entre
+`observer_pos` y el jugador — si algo lo bloquea de verdad, está
+escondido. No alcanza con "estar cerca" de un prop, tiene que haber un
+obstáculo real en la línea recta. `Enemy.gd`/`Spitter.gd`/`Criminal.gd`
+consultan esto (vía `has_method` por seguridad) justo antes de la
+transición PATROL→detección — un jugador escondido detrás de un prop no
+se detecta aunque esté dentro del radio. **`Police.gd` no lo usa** — su
+persecución depende del Nivel de Alerta (ruido), no de "verlo" al
+jugador directamente, así que cobertura no lo afecta en esta primera
+versión (seguiría siendo detectable por el ruido que generes estando
+escondido).
+
+**Letal vs. no letal**: `knockout()` + señal `knocked_out` agregados a
+`Enemy.gd` (heredado por Runner.gd), `Spitter.gd`, `Police.gd` y
+`Criminal.gd` — a propósito una señal DISTINTA de `died`, para que nada
+que dependa de "murió de verdad" (`SaveManager.add_police_kill()`,
+conectada solo a `police.died` en `Main._spawn_police()`) se dispare con
+un noqueo. Confirma la regla del GDD 2.5: "noquear no sube Notoriedad".
+`Player._process_takedown()`: mantener `takedown` apuntando a un enemigo
+dentro de `takedown_range` (40px) lo neutraliza tras un canal de
+`takedown_channel_time` (0.6s) — más lento y expuesto que el golpe normal
+(instantáneo pero letal), a propósito, para que sea una decisión táctica
+real. El objetivo queda "trabado" mientras se canaliza (no cambia si otro
+enemigo se acerca más) y se cancela si se suelta el botón o el objetivo
+sale de rango. Simplificación de prototipo: visualmente `knockout()` usa
+el mismo `Fx.play_death()` que morir de verdad — el nodo desaparece igual,
+la diferencia es 100% semántica (qué señal se emite). Sin cuerpo
+"noqueado" persistente todavía.
+
+HUD (`Main._update_hud()`): sufijo `"[Cobertura]"` mientras `in_cover` es
+`true`, para poder confirmar el estado jugando sin adivinar.
+
 ### Notoriedad (`scripts/SaveManager.gd`, autoload)
 GDD 2.5 — la stat que SÍ persiste entre corridas, a diferencia del Nivel de
 Alerta de `FactionManager.gd` (que es por misión y siempre arranca en 0).

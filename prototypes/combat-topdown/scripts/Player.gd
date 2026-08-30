@@ -17,6 +17,23 @@ extends CharacterBody2D
 @export var dash_push_impulse: float = 50.0
 @export var dash_damage: int = 1
 
+## Cobertura activa (GDD 2.3): mantener presionado "cover" mientras no te
+## movés te vuelve indetectable para enemigos que buscan por distancia
+## (Enemy.gd/Spitter.gd/Criminal.gd), pero SOLO si hay un obstáculo físico
+## real (Props/paredes) entre vos y quien te busca — ver is_hidden_from().
+## No es automático por estar cerca de algo, hay que sostener la acción.
+var in_cover: bool = false
+
+## Noqueo (GDD 2.3: letal vs. no letal, consecuencia distinta — matar
+## policías/testigos sube Notoriedad, noquear no). Mantener "takedown"
+## apuntando a un enemigo cercano lo neutraliza sin matarlo tras un canal
+## de takedown_channel_time — más lento y expuesto que el golpe normal
+## (que sigue siendo instantáneo pero letal), a propósito.
+@export var takedown_range: float = 40.0
+@export var takedown_channel_time: float = 0.6
+var _takedown_target: Node = null
+var _takedown_time_left: float = 0.0
+
 ## --- Sistema de armas: roster de WeaponData.gd (5 armas x 2 niveles) ---
 ## weapon_id == "" hasta que Main muestra la pantalla de elección inicial y el
 ## jugador elige (ver riesgo #1 en STATUS.md/plan: _shoot()/_get_effective_
@@ -142,6 +159,10 @@ func _physics_process(delta: float) -> void:
 		velocity = _get_effective_speed() * input_vec
 	move_and_slide()
 
+	# Basado en input_vec (no en velocity) para que la intención de
+	# "quedarse quieto" sea inmediata y no dependa de redondeos de física.
+	in_cover = Input.is_action_pressed("cover") and input_vec.length() < 0.1 and not is_dashing
+
 	# El disparo se deshabilita durante el dash: es una esquiva rápida,
 	# no tendría sentido apuntar con precisión mientras se ejecuta
 	# (salvo con mov_t3_phantom, que habilita disparar en dash).
@@ -173,6 +194,11 @@ func _physics_process(delta: float) -> void:
 	if shoot_allowed and Input.is_action_pressed("shoot") and fire_cooldown <= 0.0:
 		_shoot()
 		fire_cooldown = _get_effective_fire_rate()
+
+	if Input.is_action_pressed("takedown") and not is_dashing:
+		_process_takedown(delta)
+	else:
+		_cancel_takedown()
 
 	_update_shake(delta)
 
@@ -368,6 +394,64 @@ func _melee_attack() -> void:
 	# sistema de testigos todavía, así que por ahora es un ruido chico
 	# plano en vez de "silencioso salvo testigo").
 	FactionManager.report_noise(FactionManager.NOISE_MELEE, global_position)
+
+## Canal de noqueo (GDD 2.3): mientras se mantiene "takedown" apuntando a un
+## enemigo dentro de takedown_range, ese enemigo queda "trabado" como
+## objetivo (no cambia si otro se acerca más, para que el canal no se
+## reinicie solo) hasta completarlo o hasta que se salga de rango/se suelte
+## el botón — ver _cancel_takedown().
+func _process_takedown(delta: float) -> void:
+	if _takedown_target == null or not is_instance_valid(_takedown_target):
+		_takedown_target = _find_takedown_target()
+		_takedown_time_left = takedown_channel_time
+		if _takedown_target == null:
+			return
+
+	var dist: float = (_takedown_target.global_position - global_position).length()
+	if dist > takedown_range * 1.3:
+		_cancel_takedown()
+		return
+
+	_takedown_time_left -= delta
+	if _takedown_time_left <= 0.0:
+		if _takedown_target.has_method("knockout"):
+			_takedown_target.knockout()
+		_cancel_takedown()
+
+func _cancel_takedown() -> void:
+	_takedown_target = null
+	_takedown_time_left = 0.0
+
+## Solo enemigos que exponen knockout() son objetivo válido (Enemy.gd,
+## Spitter.gd, Police.gd, Criminal.gd) — no hace falta filtrar por tipo acá,
+## has_method ya lo resuelve.
+func _find_takedown_target() -> Node:
+	var best: Node = null
+	var best_dist: float = takedown_range
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if not is_instance_valid(enemy) or not enemy.has_method("knockout"):
+			continue
+		var d: float = (enemy.global_position - global_position).length()
+		if d <= best_dist:
+			best = enemy
+			best_dist = d
+	return best
+
+## Cobertura activa (GDD 2.3): true solo si el jugador está en cobertura Y
+## hay un obstáculo físico real (Props/paredes, layer 8) entre `observer_pos`
+## y el jugador — no basta con estar "detrás" de algo en teoría, tiene que
+## bloquear la línea de visión de verdad. Usado por Enemy.gd/Spitter.gd/
+## Criminal.gd antes de pasar de PATROL a un estado de detección. Police.gd
+## no lo usa todavía — su persecución depende del Nivel de Alerta, no de
+## ver al jugador directamente (ver STATUS.md).
+func is_hidden_from(observer_pos: Vector2) -> bool:
+	if not in_cover:
+		return false
+	var space_state := get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(observer_pos, global_position)
+	query.collision_mask = 8
+	var result := space_state.intersect_ray(query)
+	return not result.is_empty()
 
 ## Feedback visual simple: el sprite del arma se adelanta y vuelve.
 func _play_melee_lunge() -> void:

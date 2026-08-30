@@ -57,6 +57,11 @@ var _flee_dir: Vector2 = Vector2.ZERO
 
 signal died
 signal health_changed(current: int, max_health: int)
+## GDD 2.3, letal vs. no letal: knockout() (Player._process_takedown())
+## emite ESTA señal en vez de `died` — así SaveManager.add_police_kill()
+## (conectada solo a `died` en Main._spawn_police()) no se dispara con un
+## noqueo. "Noquear no sube Notoriedad", tal cual pide el GDD 2.5.
+signal knocked_out
 
 @onready var _anim: AnimatedSprite2D = $Visual
 
@@ -274,3 +279,12 @@ func take_damage(amount: int, from_ai: bool = false) -> void:
 	# haya subido.
 	if _state == State.PATROL or _state == State.INVESTIGATE:
 		_state = State.PURSUE
+
+## GDD 2.3: neutraliza sin matar — ver comentario de la señal knocked_out.
+func knockout() -> void:
+	if health <= 0:
+		return
+	health = 0
+	health_changed.emit(health, max_health)
+	knocked_out.emit()
+	Fx.play_death(self, _anim)

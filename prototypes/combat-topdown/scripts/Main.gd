@@ -521,8 +521,12 @@ func _update_hud() -> void:
 	# comportan bien mientras todavía no hay UI de Hub que las muestre.
 	var alert_text: String = "   Alerta: %s" % FactionManager.level_name()
 	var notoriety_text: String = "   Notoriedad: %d" % SaveManager.notoriety
+	# GDD 2.3: feedback simple de que la cobertura está activa (mantener
+	# "cover" sin moverse) — sin esto no hay forma de confirmar el estado
+	# solo mirando la pantalla.
+	var cover_text: String = "   [Cobertura]" if is_instance_valid(_player) and _player.in_cover else ""
 
-	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text, alert_text, notoriety_text]
+	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s%s%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text, alert_text, notoriety_text, cover_text]
 
 # ---------------------------------------------------------------------------
 # UI kit del pack (barra de vida del jefe, menú principal) — ver STATUS.md
