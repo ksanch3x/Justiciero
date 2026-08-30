@@ -398,6 +398,12 @@ func _spawn_boss() -> void:
 	boss.contact_range = 30.0
 	boss.attack_interval = 1.1
 	boss.attack_telegraph_time = 0.35
+	# El jefe no patrulla: detección/lose_track cubren toda la sala (900x640)
+	# de sobra, así arranca persiguiendo de inmediato apenas se instancia
+	# (ver Enemy.gd, máquina de estados PATROL/ALERT/CHASE/ATTACK) — un jefe
+	# vagando antes de notar al jugador no tendría sentido acá.
+	boss.detection_range = 2000.0
+	boss.lose_track_range = 2000.0
 	boss.died.connect(_on_boss_died)
 	boss.health_changed.connect(_on_boss_health_changed)
 

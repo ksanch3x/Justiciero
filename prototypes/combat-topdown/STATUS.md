@@ -126,8 +126,9 @@ el juego se volvía más fácil con las oleadas.
 ### Enemigos
 3 tipos, todos con sprite real del pack (no tintes, hay 4 criaturas
 distintas en `Enemies/Tiles/`, una por fila del grid 4x4):
-- **Grunt** (`Enemy.gd`/`Enemy.tscn`, fila 2 = naranja/amarilla): persigue,
-  daño de contacto. Único tipo hasta oleada 2.
+- **Grunt** (`Enemy.gd`/`Enemy.tscn`, fila 2 = naranja/amarilla): máquina de
+  estados PATROL/ALERT/CHASE/ATTACK (ver abajo), daño de contacto. Único
+  tipo hasta oleada 2.
 - **Runner** (`Runner.gd extends Enemy.gd`, fila 1 = marrón orejas moradas):
   más rápido, menos vida/daño. Desde oleada 2.
 - **Spitter** (`Spitter.gd`, script propio, fila 0 = turquesa con púas):
@@ -138,6 +139,39 @@ distintas en `Enemies/Tiles/`, una por fila del grid 4x4):
   para no chocar con las balas del jugador ni con otros enemigos.
 - Fila 3 del pack (azul grande con dientes) **no se usa todavía** — candidata
   a un 4to tipo "tanque" más adelante.
+
+**Máquina de estados de `Enemy.gd`** (Fase 2 de la hoja de ruta del GDD de
+`games/justiciero/`, sección 6 — primer paso hacia la IA de facciones):
+`enum State { PATROL, ALERT, CHASE, ATTACK }`.
+- **PATROL**: camina a `patrol_speed` entre puntos aleatorios dentro de
+  `patrol_radius` de su posición de spawn. Pasa a ALERT si el jugador entra
+  en `detection_range` (260px por defecto) — detección circular por
+  distancia, no hay cono de visión/raycast todavía (el GDD lo marca
+  explícitamente como el approach de MVP en su sección 5.1).
+- **ALERT**: se queda quieto `alert_time` (0.4s, el "signo de exclamación")
+  antes de pasar a CHASE. Si el jugador se aleja más de `lose_track_range`
+  (340px, a propósito mayor que `detection_range` para evitar oscilar en el
+  borde) vuelve a PATROL.
+- **CHASE**: persigue en línea recta a `speed` (comportamiento original,
+  ahora es solo uno de los 4 estados). Pasa a ATTACK dentro de
+  `contact_range`, o a ALERT si pierde al jugador por `lose_track_range`.
+- **ATTACK**: quieto, dispara el telegraph+daño de contacto que ya existía
+  (sin cambios en esa lógica). Vuelve a CHASE si el jugador se aleja de
+  `contact_range`.
+- Recibir daño saca de PATROL/ALERT directo a CHASE (`take_damage()`) —
+  golpe por sorpresa siempre alerta al enemigo, sin depender de distancia.
+- Runner.gd hereda todo esto sin cambios (solo pisa stats). Spitter.gd
+  **no** se tocó — sigue con su lógica propia de acercarse+disparar sin
+  patrulla ni estados.
+- El jefe (`Main._spawn_boss()`) pisa `detection_range`/`lose_track_range`
+  a 2000 para que arranque persiguiendo de inmediato, sin patrulla — no
+  tendría sentido un jefe vagando en su propia sala.
+- **Cambio de sensación esperado**: antes los Grunt/Runner perseguían desde
+  el instante en que spawneaban; ahora hay un breve patrullaje +
+  alerta antes de cargar si el jugador no está ya cerca del punto de
+  spawn. Es intencional (así arranca el sigilo/detección del GDD), pero
+  cambia el ritmo de las oleadas tempranas — a confirmar jugando si
+  `detection_range`/`alert_time` necesitan ajuste.
 
 **Escalado por oleada** (`Main.gd`): vida del Grunt +15%/oleada (ya existía),
 + velocidad +3%/oleada compuesto, + contact_damage +1 cada 4 oleadas (nuevo,
