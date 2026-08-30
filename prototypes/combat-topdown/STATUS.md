@@ -199,12 +199,16 @@ comentario en `Main._pick_enemy_scene()`).
 | Capa (bit) | Quién | Mask |
 |---|---|---|
 | 1 | Player | 8 (props) |
-| 2 | Enemy/Runner/Spitter | 8 (props) |
+| 2 | Enemy/Runner/Spitter | 10 = 8+2 (props + otros enemigos) |
 | 4 | Bullet del jugador | 2 (enemigos) |
 | 8 | Props | — (estático) |
 | 16 | Bullet enemiga (Spitter) | 1 (jugador), vía `Bullet.target_mask` |
 
-Jugador y enemigos **no colisionan físicamente entre sí** (por eso el melee
+Los enemigos **sí colisionan entre sí** (mask incluye su propia layer 2) —
+antes no, y con oleadas grandes se apilaban exactamente en el mismo punto,
+lo que hacía que golpear con melee se sintiera impreciso (en la práctica
+pegabas a una masa superpuesta, no a enemigos distribuidos). Jugador y
+enemigos siguen **sin colisionar físicamente entre sí** (por eso el melee
 necesitó knockback explícito — pueden superponerse del todo).
 
 ## Cuidados técnicos que ya causaron bugs reales (no repetir)
@@ -271,12 +275,22 @@ necesitó knockback explícito — pueden superponerse del todo).
 
 ## Hallazgos de auditoría pendientes / conocidos (no bloqueantes)
 
-- Enemigos no colisionan entre sí → se pueden apilar visualmente con oleadas
-  grandes (mitigado parcialmente por el knockback del dash/melee, no
-  resuelto del todo).
+- ~~Enemigos no colisionan entre sí~~ — corregido: `collision_mask` de
+  Enemy/Runner/Spitter pasó a 10 (props + su propia layer), así se empujan
+  entre sí en vez de apilarse. También se agregó telegraph visual (pulso
+  amarillo, `Fx.telegraph_attack`, `attack_telegraph_time=0.25s` en
+  `Enemy.gd`) antes de que el daño de contacto conecte — antes era
+  instantáneo al tocar, sin aviso para esquivar.
+- Jugado hasta oleada 7 en una corrida real (primer feedback de balance
+  fuera de la auditoría) — el escalado se sintió duro ahí, sin precisar
+  todavía qué componente exacto (cantidad de enemigos vs. escalado de
+  daño/vida) fue el problema. Pendiente de otra pasada de balance con más
+  feedback de partidas.
 - El pool de mejoras viejo ya no existe (reemplazado por el árbol), pero el
   árbol nuevo todavía no fue jugado/balanceado a fondo — falta feedback real
   de partidas largas.
+- **Backlog explícito del usuario** (no implementar todavía, "vamos paso a
+  paso"): diseño de niveles reales (más allá de la arena única) y jefes.
 - Audio pendiente **a propósito**: hay flash de daño, muerte con feedback
   (escala+fade) y screen shake (`scripts/Fx.gd` + `Player.gd`), pero sin
   sonido — el usuario pidió posponer `Sfx.gd`/síntesis de `.wav` para más
