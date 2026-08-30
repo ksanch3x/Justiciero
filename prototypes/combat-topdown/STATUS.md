@@ -463,6 +463,44 @@ no tiene sentido persistir un stat sin nada que lo lea.
   enemigos (rojo tenue). Textura de luz generada (`assets/generated/light_glow.tres`,
   `GradientTexture2D` radial), no es un asset de imagen.
 
+### Recorrido generado (`scripts/Dungeon.gd`, autoload) — GDD Fase 6
+
+`RoomData.gd` ya **no** contiene el recorrido: contiene 7 **plantillas** de
+sala (geometría reutilizable). Quién va primero, a dónde lleva cada puerta
+y cuántas salas tiene la corrida lo arma `Dungeon.generate()` en cada
+partida. Antes la cadena estaba cableada (`room_1` → `room_2a` → ...) y
+todas las corridas eran idénticas.
+
+- **`door_slots` vs `doors`**: una plantilla declara DÓNDE puede haber una
+  puerta (`door_slots: {side: Vector2}`), no a qué sala lleva. El destino
+  lo completa el generador (`doors: {side: {to, pos}}`, que es lo que
+  consume `Main.gd`). Una plantilla con 2 slots sirve para bifurcar; con 1,
+  solo como paso.
+- **Forma del recorrido**: `LAYER_SIZES = [1, 2, 1, 2]` + capa del jefe —
+  capa de 1 sala con dos puertas → bifurcación de 2 salas → ambas
+  convergen → bifurca de nuevo → jefe. Cambiar esa constante cambia el
+  largo y la forma sin tocar nada más.
+- **Qué NO hace, a propósito**: no genera formas nuevas ni tira rects al
+  azar. Las salas siguen diseñadas a mano; lo procedural es el ORDEN y las
+  CONEXIONES. Un generador de formas daría salas sin intención de diseño,
+  que es justo lo que las plantillas evitan.
+- `_instantiate_template()` usa `duplicate(true)` — **copia profunda**. Sin
+  eso, dos salas generadas desde la misma plantilla compartirían los
+  sub-diccionarios y escribir `doors` en una pisaría la otra.
+- La semilla se imprime al generar (`[Dungeon] recorrido generado,
+  semilla=N`): si sale un recorrido raro, se reproduce pasándosela a
+  `generate()`.
+- **Limitación conocida**: solo `cruz` y `anden` tienen 2 `door_slots`, y
+  `cruz` está fija como entrada — así que la segunda bifurcación casi
+  siempre cae en `anden`. Agregar plantillas con 2 slots es lo que daría
+  más variedad ahí. El validador avisa si quedan menos de 2.
+
+**Verificación**: se portó `generate()` a Python y se corrió sobre **3000
+semillas** chequeando que el jefe siempre sea alcanzable, que no queden
+salas huérfanas, que ninguna sala tenga menos puertas de las que su capa
+necesita y que ningún destino apunte a un id inexistente — 0 problemas,
+120 recorridos distintos.
+
 ### Geometría de sala: unión de rectángulos + muros generados
 
 Antes las 7 salas eran **el mismo rectángulo de 900x640** y las paredes
@@ -504,11 +542,15 @@ salas era el tinte y los props. Ahora cada sala define su propia forma.
 unión de cada sala esté conectada, que `entry`/`spawns`/`props` caigan
 dentro y no pisen un blocker, que cada puerta caiga sobre el borde y
 apunte a una sala existente, que todas las salas sean alcanzables desde
-`room_1`, y que los spawns fijos de Policía/Criminal de `Main.gd` caigan
-dentro de `room_1`. El script tiene self-test implícito: se probó
-metiéndole a propósito un spawn fuera del mapa, una puerta flotante y un
-rect desconectado, y detectó los tres. **Correrlo después de cualquier
-cambio en `RoomData.gd`.**
+la plantilla de entrada, y que los spawns fijos de Policía/Criminal/Civil
+de `Main.gd` caigan dentro de ella. Se probó metiéndole a propósito un
+spawn fuera del mapa, una puerta flotante, un rect desconectado y una
+plantilla de 2 slots de menos — detectó los cuatro. **Correrlo después de
+cualquier cambio en `RoomData.gd`.**
+
+`tools/check_balance.py` chequea balance de `()[]{}`  en todos los
+`.gd` **ignorando comentarios y strings** — la versión ingenua (contar
+caracteres) da falsos positivos con comentarios tipo `# 1) hacer tal cosa`.
 
 ### Salas encadenadas, puertas y jefe (v2, cierre del demo)
 "Mazmorra con salas y elección de puerta", deliberadamente simple: **sin

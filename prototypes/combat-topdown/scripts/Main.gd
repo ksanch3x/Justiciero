@@ -40,9 +40,11 @@ var _choosing_upgrade: bool = false
 
 ## --- Sistema de salas/puertas/jefe (envuelve al de oleadas, no lo
 ## reemplaza: wave_number arriba sigue siendo global a toda la corrida). ---
-var current_room_id: String = "room_1"
+## Se fija en _ready() con el id que devuelva Dungeon.generate() — los ids
+## ya no son fijos ("room_1"...), los arma el generador en cada corrida.
+var current_room_id: String = ""
 ## Oleadas completadas DENTRO de la sala activa (se resetea a 0 en cada
-## transición de sala). Cuando llega a RoomData.get_room(id).waves, se abre
+## transición de sala). Cuando llega a Dungeon.get_room(id).waves, se abre
 ## la puerta en vez de mostrar el panel de mejoras.
 var waves_in_room: int = 0
 ## true mientras hay una puerta abierta esperando que el jugador la cruce.
@@ -130,7 +132,14 @@ func _ready() -> void:
 	# nueva, a diferencia de una futura Notoriedad persistente.
 	FactionManager.reset()
 
-	var first_room: Dictionary = RoomData.get_room(current_room_id)
+	# Recorrido nuevo en cada corrida (GDD Fase 6): qué plantilla de sala va
+	# en cada lugar y a dónde lleva cada puerta se decide acá, no está
+	# cableado en RoomData. La semilla se imprime en consola por si hay que
+	# reproducir un recorrido concreto.
+	Dungeon.generate()
+	current_room_id = Dungeon.start_room_id()
+
+	var first_room: Dictionary = Dungeon.get_room(current_room_id)
 	_apply_room(first_room)
 	_player.global_position = first_room["entry"]
 	_spawn_police()
@@ -164,7 +173,7 @@ func _process(delta: float) -> void:
 			_spawn_timer = time_between_spawns
 	elif enemies_alive <= 0:
 		waves_in_room += 1
-		var room: Dictionary = RoomData.get_room(current_room_id)
+		var room: Dictionary = Dungeon.get_room(current_room_id)
 		if waves_in_room >= int(room["waves"]):
 			_open_room_doors(room)
 		else:
@@ -189,7 +198,7 @@ func _pick_enemy_scene() -> PackedScene:
 	# La sala activa puede acotar aún más qué tipos aparecen (RoomData
 	# .enemy_types), por encima del gate normal por wave_number: room_1 solo
 	# tiene Grunt aunque wave_number ya habilite Runner/Spitter, por ejemplo.
-	var room: Dictionary = RoomData.get_room(current_room_id)
+	var room: Dictionary = Dungeon.get_room(current_room_id)
 	var allowed_types: Array = room.get("enemy_types", ["grunt", "runner", "spitter"])
 	var runner_allowed: bool = allowed_types.has("runner")
 	var spitter_allowed: bool = allowed_types.has("spitter")
@@ -226,7 +235,7 @@ func _spawn_enemy() -> void:
 	# Los puntos vienen de la sala activa (RoomData `spawns`), no de un
 	# nodo fijo de Main.tscn: con salas de forma distinta, los 5 puntos
 	# fijos del rectángulo viejo caían dentro de muros o fuera del área.
-	var points: Array = RoomData.get_room(current_room_id)["spawns"]
+	var points: Array = Dungeon.get_room(current_room_id)["spawns"]
 	if points.is_empty():
 		return
 	var point: Vector2 = points[randi() % points.size()]
@@ -335,7 +344,7 @@ func _open_room_doors(room: Dictionary) -> void:
 
 func _on_door_chosen(side: String) -> void:
 	_choosing_upgrade = false
-	var room: Dictionary = RoomData.get_room(current_room_id)
+	var room: Dictionary = Dungeon.get_room(current_room_id)
 	var doors: Dictionary = room["doors"]
 	_open_door(side, String(doors[side]["to"]))
 
@@ -350,7 +359,7 @@ func _open_door(side: String, dest_room_id: String) -> void:
 		_open_door_sides.append(side)
 	_rebuild_walls()
 
-	var room: Dictionary = RoomData.get_room(current_room_id)
+	var room: Dictionary = Dungeon.get_room(current_room_id)
 	var door_pos: Vector2 = room["doors"][side]["pos"]
 	var vertical: bool = _is_vertical_side(side)
 
@@ -417,7 +426,7 @@ func _rebuild_walls() -> void:
 	for child in _walls.get_children():
 		_walls.remove_child(child)
 		child.queue_free()
-	_build_walls_for_room(RoomData.get_room(current_room_id))
+	_build_walls_for_room(Dungeon.get_room(current_room_id))
 
 ## Recorre el borde de la unión de celdas y genera un StaticBody2D por
 ## cada tramo recto de muro.
@@ -621,7 +630,7 @@ func _transition_to_room(dest_room_id: String) -> void:
 	waves_in_room = 0
 	current_room_id = dest_room_id
 
-	var room: Dictionary = RoomData.get_room(dest_room_id)
+	var room: Dictionary = Dungeon.get_room(dest_room_id)
 	_apply_room(room)
 	# `entry` en vez de (0,0): con salas de forma asimétrica el centro
 	# geométrico puede caer dentro de un muro o fuera de la sala.

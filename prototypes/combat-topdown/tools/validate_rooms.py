@@ -12,16 +12,26 @@ Uso:
 
 Sale con codigo 1 y lista los problemas si encuentra alguno.
 
+RoomData.gd guarda PLANTILLAS de sala (geometria reutilizable); quien las
+encadena en un recorrido concreto es Dungeon.gd, en runtime. Este script
+valida las plantillas; la validez del recorrido generado se cubre aparte
+simulando Dungeon.generate() sobre muchas semillas.
+
 Que valida:
-  1. Cada sala tiene una union CONECTADA (dos rects que solo se tocan en
-     la arista no cuentan: el generador de muros de Main.gd trabaja sobre
-     una grilla, y ahi queda pared entre medio).
+  1. Cada plantilla tiene una union CONECTADA (dos rects que solo se tocan
+     en la arista no cuentan: el generador de muros de Main.gd trabaja
+     sobre una grilla, y ahi queda pared entre medio).
   2. entry / spawns / props.pos caen dentro de la union, con margen para
-     el radio de colision del jugador/enemigos (14px).
-  3. Cada doors[side].pos cae SOBRE el borde de la union (no adentro ni
+     el radio de colision del jugador/enemigos (14px), y no pisan un
+     muro interior (blockers).
+  3. Cada door_slot cae SOBRE el borde de la union (no adentro ni
      flotando afuera).
-  4. Cada doors[side].to apunta a una sala que existe.
-  5. Todas las salas son alcanzables desde room_1 siguiendo las puertas.
+  4. Toda plantilla que no sea la del jefe tiene al menos un door_slot, y
+     existe exactamente una plantilla de jefe.
+  5. Hay al menos 2 plantillas con 2 door_slots — Dungeon.gd bifurca dos
+     veces y sin eso repetiria siempre la misma sala en las bifurcaciones.
+  6. Los spawns fijos de Policia/Criminal/Civil de Main.gd caen dentro de
+     la plantilla de entrada.
 """
 
 import re
@@ -87,15 +97,15 @@ def parse_room_body(body):
                     }
                 )
 
-    room["doors"] = {}
-    for dm in re.finditer(
-        r'"(east|west|north|south)":\s*\{"to":\s*"(\w+)",\s*"pos":\s*Vector2\(\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\)\}',
-        body,
-    ):
-        room["doors"][dm.group(1)] = {
-            "to": dm.group(2),
-            "pos": (float(dm.group(3)), float(dm.group(4))),
-        }
+    room["door_slots"] = {}
+    sm = re.search(r'"door_slots": \{(.*?)\}', body, re.S)
+    if sm:
+        for side, x, y in re.findall(
+            r'"(east|west|north|south)":\s*Vector2\(\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\)',
+            sm.group(1),
+        ):
+            room["door_slots"][side] = (float(x), float(y))
+    room["is_boss"] = '"is_boss": true' in body
     return room
 
 
@@ -244,23 +254,21 @@ def main():
                     f"{rid}: props[{i}] visible en {p['pos']} pisa un muro interior"
                 )
 
-        for side, d in room["doors"].items():
-            if d["to"] not in rooms:
+        for side, pos in room["door_slots"].items():
+            if not on_border(pos, cells):
                 problems.append(
-                    f"{rid}: puerta {side} apunta a '{d['to']}', que no existe"
-                )
-            if not on_border(d["pos"], cells):
-                problems.append(
-                    f"{rid}: puerta {side} en {d['pos']} no cae sobre el borde "
+                    f"{rid}: door_slot {side} en {pos} no cae sobre el borde "
                     f"de la union"
                 )
+        if not room["is_boss"] and not room["door_slots"]:
+            problems.append(f"{rid}: plantilla sin door_slots y no es la del jefe")
 
     # Los spawns fijos de Policia/Criminal viven en Main.gd (no en
     # RoomData) pero se plantan en room_1, asi que se validan igual.
     main_gd = ROOM_DATA.parent / "Main.gd"
-    if main_gd.exists() and "room_1" in rooms:
+    if main_gd.exists() and "cruz" in rooms:
         mt = main_gd.read_text(encoding="utf-8")
-        r1 = rooms["room_1"]["rects"]
+        r1 = rooms["cruz"]["rects"]
         pol = re.search(
             r"police\.global_position = Vector2\(\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\)", mt
         )
@@ -269,7 +277,7 @@ def main():
         ):
             problems.append(
                 f"Main._spawn_police: ({pol.group(1)}, {pol.group(2)}) "
-                f"cae fuera de room_1"
+                f"cae fuera de la plantilla de entrada (cruz)"
             )
         # _spawn_criminals y _spawn_civilians usan ambos `var positions :=
         # [...]`, asi que se buscan por nombre de funcion para poder
@@ -283,26 +291,30 @@ def main():
             for i, c in enumerate(_vectors(fm.group(1))):
                 if not inside(c, r1, BODY_RADIUS):
                     problems.append(
-                        f"Main.{fname}: positions[{i}] {c} cae fuera de room_1"
+                        f"Main.{fname}: positions[{i}] {c} cae fuera de la plantilla de entrada (cruz)"
                     )
-                elif in_blocker(c, rooms["room_1"]["blockers"], BODY_RADIUS):
+                elif in_blocker(c, rooms["cruz"]["blockers"], BODY_RADIUS):
                     problems.append(
                         f"Main.{fname}: positions[{i}] {c} pisa un muro interior"
                     )
 
-    # Alcanzabilidad desde room_1.
-    if "room_1" in rooms:
-        seen = {"room_1"}
-        stack = ["room_1"]
-        while stack:
-            cur = stack.pop()
-            for d in rooms[cur]["doors"].values():
-                if d["to"] in rooms and d["to"] not in seen:
-                    seen.add(d["to"])
-                    stack.append(d["to"])
-        for rid in rooms:
-            if rid not in seen:
-                problems.append(f"{rid}: inalcanzable desde room_1")
+    # Dungeon.gd necesita plantillas con 2 door_slots para las capas que
+    # bifurcan (LAYER_SIZES tiene dos capas de 2 salas). Sin al menos dos,
+    # la generacion repetiria siempre la misma sala en las bifurcaciones.
+    two_slot = [
+        rid
+        for rid, r in rooms.items()
+        if not r["is_boss"] and len(r["door_slots"]) >= 2
+    ]
+    if len(two_slot) < 2:
+        problems.append(
+            f"solo {len(two_slot)} plantilla(s) con 2 door_slots "
+            f"({two_slot}) — Dungeon.gd bifurca dos veces y necesita al "
+            f"menos 2 para no repetir siempre la misma"
+        )
+
+    if not any(r["is_boss"] for r in rooms.values()):
+        problems.append("ninguna plantilla tiene is_boss: true")
 
     if problems:
         print(f"{len(problems)} problema(s):\n")
@@ -310,7 +322,7 @@ def main():
             print("  -", p)
         return 1
 
-    print(f"OK — {len(rooms)} salas validadas:")
+    print(f"OK — {len(rooms)} plantillas validadas:")
     for rid, room in sorted(rooms.items()):
         cells = cells_of(room["rects"])
         xs = [c[0] for c in cells]
@@ -318,8 +330,8 @@ def main():
         w = (max(xs) - min(xs) + 1) * CELL
         h = (max(ys) - min(ys) + 1) * CELL
         print(
-            f"  {rid:10s} {len(room['rects'])} rect(s), "
-            f"bbox {w:.0f}x{h:.0f}, {len(room['doors'])} puerta(s)"
+            f"  {rid:16s} {len(room['rects'])} rect(s), "
+            f"bbox {w:.0f}x{h:.0f}, {len(room['door_slots'])} door_slot(s)"
         )
     return 0
 

@@ -16,6 +16,7 @@ Fx="*res://scripts/Fx.gd"
 FactionManager="*res://scripts/FactionManager.gd"
 SaveManager="*res://scripts/SaveManager.gd"
 Arena="*res://scripts/Arena.gd"
+Dungeon="*res://scripts/Dungeon.gd"
 
 [input]
 
