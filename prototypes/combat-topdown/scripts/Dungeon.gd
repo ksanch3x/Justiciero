@@ -80,7 +80,12 @@ func generate(rng_seed: int = -1) -> void:
 			ids.append("r%d_%d" % [layer_index, slot])
 		layers.append(ids)
 	var boss_id: String = "r_boss"
-	layers.append([boss_id] as Array[String])
+	# Declarado en dos pasos a propósito: `[boss_id] as Array[String]` es
+	# dudoso en GDScript (el operador `as` es para castear objetos, no para
+	# tipar literales de array) y este código nunca se ejecutó en Godot, así
+	# que no conviene apostar a que el parser lo acepte.
+	var boss_layer: Array[String] = [boss_id]
+	layers.append(boss_layer)
 
 	# 2) Elegir plantilla para cada sala. Cuántas puertas necesita cada una
 	#    sale de cuántas salas tiene la capa SIGUIENTE.
@@ -142,7 +147,13 @@ func _pick_template(rng: RandomNumberGenerator, doors_needed: int, used: Array[S
 	for template_id in eligible:
 		if not used.has(template_id):
 			fresh.append(template_id)
-	var pool: Array[String] = fresh if not fresh.is_empty() else eligible
+	# if/else en vez de ternario: `var x: T = a if cond else b` es la forma
+	# que ya rompió la inferencia de tipos de GDScript cinco veces en este
+	# proyecto (cuidado técnico #8 de STATUS.md). No vale la pena arriesgar
+	# por una línea.
+	var pool: Array[String] = eligible
+	if not fresh.is_empty():
+		pool = fresh
 	# Si no hubiera ninguna elegible (no debería: hay 2 plantillas con 2
 	# slots), se cae a la de entrada antes que romper la generación.
 	if pool.is_empty():
