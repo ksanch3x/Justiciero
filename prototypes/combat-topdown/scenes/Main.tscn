@@ -1,18 +1,96 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/Main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Enemy.tscn" id="3"]
+[ext_resource type="Script" path="res://scripts/UpgradeUI.gd" id="4"]
+[ext_resource type="Texture2D" path="res://assets/generated/sand_floor_2000.png" id="5"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0062.png" id="6"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0063.png" id="7"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0082.png" id="8"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0083.png" id="9"]
+[ext_resource type="Texture2D" path="res://assets/desert-shooter-pack/Tiles/tile_0084.png" id="10"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_prop"]
+radius = 7.0
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_h"]
+size = Vector2(980, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_v"]
+size = Vector2(40, 720)
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
 
-[node name="Background" type="ColorRect" parent="."]
-offset_left = -1000.0
-offset_top = -1000.0
-offset_right = 1000.0
-offset_bottom = 1000.0
-color = Color(0.1, 0.1, 0.13, 1)
+[node name="Background" type="Sprite2D" parent="."]
+position = Vector2(-450, -320)
+centered = false
+texture_filter = 1
+texture = ExtResource("5")
+region_enabled = true
+region_rect = Rect2(0, 0, 900, 640)
+
+[node name="CanvasModulate" type="CanvasModulate" parent="."]
+color = Color(0.16, 0.16, 0.22, 1)
+
+[node name="Walls" type="Node2D" parent="."]
+
+[node name="North" type="StaticBody2D" parent="Walls"]
+position = Vector2(0, -340)
+collision_layer = 8
+
+[node name="ColorRect" type="ColorRect" parent="Walls/North"]
+offset_left = -490.0
+offset_top = -20.0
+offset_right = 490.0
+offset_bottom = 20.0
+color = Color(0.278431, 0.196078, 0.294118, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/North"]
+shape = SubResource("RectangleShape2D_wall_h")
+
+[node name="South" type="StaticBody2D" parent="Walls"]
+position = Vector2(0, 340)
+collision_layer = 8
+
+[node name="ColorRect" type="ColorRect" parent="Walls/South"]
+offset_left = -490.0
+offset_top = -20.0
+offset_right = 490.0
+offset_bottom = 20.0
+color = Color(0.278431, 0.196078, 0.294118, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/South"]
+shape = SubResource("RectangleShape2D_wall_h")
+
+[node name="East" type="StaticBody2D" parent="Walls"]
+position = Vector2(470, 0)
+collision_layer = 8
+
+[node name="ColorRect" type="ColorRect" parent="Walls/East"]
+offset_left = -20.0
+offset_top = -360.0
+offset_right = 20.0
+offset_bottom = 360.0
+color = Color(0.278431, 0.196078, 0.294118, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/East"]
+shape = SubResource("RectangleShape2D_wall_v")
+
+[node name="West" type="StaticBody2D" parent="Walls"]
+position = Vector2(-470, 0)
+collision_layer = 8
+
+[node name="ColorRect" type="ColorRect" parent="Walls/West"]
+offset_left = -20.0
+offset_top = -360.0
+offset_right = 20.0
+offset_bottom = 360.0
+color = Color(0.278431, 0.196078, 0.294118, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/West"]
+shape = SubResource("RectangleShape2D_wall_v")
 
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(0, 0)
@@ -20,19 +98,81 @@ position = Vector2(0, 0)
 [node name="SpawnPoints" type="Node2D" parent="."]
 
 [node name="SpawnPoint1" type="Node2D" parent="SpawnPoints"]
-position = Vector2(-400, -300)
+position = Vector2(-380, -260)
 
 [node name="SpawnPoint2" type="Node2D" parent="SpawnPoints"]
-position = Vector2(400, -300)
+position = Vector2(380, -260)
 
 [node name="SpawnPoint3" type="Node2D" parent="SpawnPoints"]
-position = Vector2(-400, 300)
+position = Vector2(-380, 260)
 
 [node name="SpawnPoint4" type="Node2D" parent="SpawnPoints"]
-position = Vector2(400, 300)
+position = Vector2(380, 260)
 
 [node name="SpawnPoint5" type="Node2D" parent="SpawnPoints"]
-position = Vector2(0, -400)
+position = Vector2(0, -260)
+
+[node name="Props" type="Node2D" parent="."]
+
+[node name="Cactus1" type="StaticBody2D" parent="Props"]
+position = Vector2(180, 90)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Cactus1"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("6")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Cactus1"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="Cactus2" type="StaticBody2D" parent="Props"]
+position = Vector2(-220, -140)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Cactus2"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("7")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Cactus2"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="Bones1" type="StaticBody2D" parent="Props"]
+position = Vector2(260, -220)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Bones1"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("8")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Bones1"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="Bones2" type="StaticBody2D" parent="Props"]
+position = Vector2(-260, 180)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/Bones2"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("9")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/Bones2"]
+shape = SubResource("CircleShape2D_prop")
+
+[node name="RockFormation" type="StaticBody2D" parent="Props"]
+position = Vector2(60, 240)
+collision_layer = 8
+
+[node name="Sprite2D" type="Sprite2D" parent="Props/RockFormation"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("10")
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Props/RockFormation"]
+shape = SubResource("CircleShape2D_prop")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -41,4 +181,33 @@ offset_left = 16.0
 offset_top = 16.0
 offset_right = 500.0
 offset_bottom = 48.0
-text = "Vida: 5/5   Enemigos eliminados: 0"
+text = "Oleada: 1   Vida: 5/5   Enemigos restantes: 0"
+
+[node name="UpgradeUI" type="CanvasLayer" parent="."]
+script = ExtResource("4")
+
+[node name="Dim" type="ColorRect" parent="UpgradeUI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.6)
+
+[node name="Panel" type="PanelContainer" parent="UpgradeUI"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -160.0
+offset_right = 200.0
+offset_bottom = 160.0
+
+[node name="Root" type="VBoxContainer" parent="UpgradeUI/Panel"]
+
+[node name="Title" type="Label" parent="UpgradeUI/Panel/Root"]
+text = "¡Oleada superada! Elegí una mejora:"
+horizontal_alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UpgradeUI/Panel/Root"]
+alignment = 1
