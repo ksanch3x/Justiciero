@@ -219,6 +219,24 @@ comentario en `Main._pick_enemy_scene()`).
 - **Spawns de oleada**: salen de `RoomData` (`spawns` por sala), no del
   nodo fijo `SpawnPoints` (eliminado de `Main.tscn`) — los 5 puntos fijos
   del rectángulo viejo caían dentro de muros en las salas con forma.
+- **Resolución y área visible** (`project.godot`, sección `[display]`):
+  viewport **1152x648**, `stretch/mode="canvas_items"`. Con el `zoom=1.3`
+  de la cámara, el área visible es **~886x498 unidades de mundo**
+  (`1152/1.3 x 648/1.3`). Antes no había sección `[display]` y se usaba el
+  default de Godot sin que estuviera escrito en ningún lado — pero el
+  diseño de salas depende de este número, así que ahora es explícito.
+  **Si se cambia la resolución o el zoom, revisar los tamaños de
+  `RoomData`**: una sala más chica que el área visible en algún eje no
+  puede respetar los límites de cámara.
+- **Salas más chicas que la vista**: Godot no maneja bien límites de
+  cámara menores al viewport (no puede satisfacerlos y muestra más allá
+  del límite). Pasa con `anden` (320 de alto) y `ele` (500 de ancho), que
+  quedan por debajo de los 886x498 visibles. `_apply_camera_limits()`
+  **ensancha el rectángulo de límites hasta el tamaño de la vista,
+  centrado en la sala** — la cámara queda fija en ese eje, que es el
+  comportamiento correcto para una sala que entra entera en pantalla. El
+  fondo cubre el rectángulo de LÍMITES (no el de la sala) para que no se
+  vea el vacío alrededor de los muros.
 - `Camera2D` del jugador sigue al jugador (es hija de `Player`) con
   `position_smoothing_enabled=true`/`speed=8.0`. Sus **límites se
   recalculan por sala** en `Main._apply_camera_limits()` a partir del

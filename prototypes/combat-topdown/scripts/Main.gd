@@ -592,14 +592,36 @@ func _apply_camera_limits(room: Dictionary) -> void:
 	var cam: Camera2D = _player.get_node_or_null("Camera2D")
 	if cam == null:
 		return
-	cam.limit_left = int(bounds.position.x - CAMERA_MARGIN)
-	cam.limit_top = int(bounds.position.y - CAMERA_MARGIN)
-	cam.limit_right = int(bounds.position.x + bounds.size.x + CAMERA_MARGIN)
-	cam.limit_bottom = int(bounds.position.y + bounds.size.y + CAMERA_MARGIN)
-	# Reposiciona el fondo para cubrir el bbox nuevo (el Sprite2D usa
-	# region_rect sobre una textura de arena pre-horneada de 2000x2000).
-	_background.position = bounds.position
-	_background.region_rect = Rect2(Vector2.ZERO, bounds.size)
+
+	var limits: Rect2 = bounds.grow(CAMERA_MARGIN)
+
+	# Godot NO maneja bien límites de cámara más chicos que la vista: no
+	# puede satisfacerlos y termina mostrando más allá del límite. Y hay
+	# salas así — `anden` mide 320 de alto y `ele` 500 de ancho, contra un
+	# área visible de ~886x498 (viewport 1152x648 / zoom 1.3, ver la
+	# sección [display] de project.godot). Cuando pasa, se ENSANCHA el
+	# rectángulo de límites hasta el tamaño de la vista, centrado en la
+	# sala: la cámara queda fija en ese eje (que es lo correcto para una
+	# sala que entra entera en pantalla) en vez de pelear contra el clamp.
+	var visible: Vector2 = get_viewport_rect().size / cam.zoom
+	if limits.size.x < visible.x:
+		limits.position.x -= (visible.x - limits.size.x) / 2.0
+		limits.size.x = visible.x
+	if limits.size.y < visible.y:
+		limits.position.y -= (visible.y - limits.size.y) / 2.0
+		limits.size.y = visible.y
+
+	cam.limit_left = int(limits.position.x)
+	cam.limit_top = int(limits.position.y)
+	cam.limit_right = int(limits.position.x + limits.size.x)
+	cam.limit_bottom = int(limits.position.y + limits.size.y)
+
+	# El fondo cubre el rectángulo de LÍMITES, no el de la sala: si cubriera
+	# solo la sala, en una que entra entera en pantalla se vería el vacío
+	# alrededor de los muros. El Sprite2D usa region_rect sobre una textura
+	# de arena pre-horneada de 2000x2000.
+	_background.position = limits.position
+	_background.region_rect = Rect2(Vector2.ZERO, limits.size)
 
 ## Reposiciona/muestra los mismos 5 StaticBody2D de Props (no instancia
 ## nada nuevo), regenera los muros, ajusta la cámara y actualiza el tinte

@@ -10,6 +10,20 @@ config/name="Combat Topdown Prototype"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
+[display]
+
+; Explícito a propósito. Antes no había sección [display] y se usaba el
+; default de Godot (1152x648) sin que nadie lo supiera — pero el diseño de
+; salas SÍ depende de este número: con zoom=1.3 (Player.tscn/Camera2D) el
+; área visible es 1152/1.3 x 648/1.3 = ~886x498 unidades de mundo, y una
+; sala más chica que eso en algún eje no puede respetar los límites de
+; cámara. Si se cambia esta resolución o el zoom, revisar
+; Main._apply_camera_limits() y los tamaños de RoomData.
+window/size/viewport_width=1152
+window/size/viewport_height=648
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
 [autoload]
 
 Fx="*res://scripts/Fx.gd"
