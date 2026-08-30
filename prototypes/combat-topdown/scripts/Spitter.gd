@@ -143,9 +143,19 @@ func _process_patrol() -> void:
 		return
 	velocity = to_target.normalized() * patrol_speed
 
+## Clampeado dentro del interior jugable — ver comentario largo en
+## Enemy.gd (bug: patrulla podía apuntar detrás de una pared y quedar
+## atascado empujando contra ella).
+const PATROL_ARENA_MIN: Vector2 = Vector2(-400, -270)
+const PATROL_ARENA_MAX: Vector2 = Vector2(400, 270)
+
 func _pick_patrol_target() -> void:
 	var offset := Vector2(randf_range(-patrol_radius, patrol_radius), randf_range(-patrol_radius, patrol_radius))
-	_patrol_target = _spawn_position + offset
+	var target: Vector2 = _spawn_position + offset
+	_patrol_target = Vector2(
+		clampf(target.x, PATROL_ARENA_MIN.x, PATROL_ARENA_MAX.x),
+		clampf(target.y, PATROL_ARENA_MIN.y, PATROL_ARENA_MAX.y)
+	)
 
 func _shoot(dir: Vector2) -> void:
 	var bullet := bullet_scene.instantiate()

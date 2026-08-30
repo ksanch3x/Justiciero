@@ -21,12 +21,13 @@ enum State { PATROL, DEFEND, FIGHT_RIVAL, FLEE }
 @export var contact_range: float = 22.0
 @export var attack_interval: float = 1.0
 @export var attack_telegraph_time: float = 0.25
-@export var patrol_radius: float = 90.0
+## Subido de 90 — ver comentario largo en Police.gd.
+@export var patrol_radius: float = 170.0
 @export var detection_range: float = 220.0
 @export var lose_track_range: float = 300.0
 ## Radio "de encuentro" con un Policía — chico a propósito, ver comentario
 ## equivalente en Police.gd (encuentro oportunista, no imán de mapa entero).
-@export var faction_detection_range: float = 90.0
+@export var faction_detection_range: float = 130.0
 @export var flee_speed: float = 130.0
 @export var flee_time: float = 3.0
 @export var flee_health_ratio: float = 0.3
@@ -170,9 +171,19 @@ func _process_patrol() -> void:
 		return
 	velocity = to_target.normalized() * patrol_speed
 
+## Clampeado dentro del interior jugable — ver comentario largo en
+## Enemy.gd (bug: patrulla podía apuntar detrás de una pared y quedar
+## atascado empujando contra ella).
+const PATROL_ARENA_MIN: Vector2 = Vector2(-400, -270)
+const PATROL_ARENA_MAX: Vector2 = Vector2(400, 270)
+
 func _pick_patrol_target() -> void:
 	var offset := Vector2(randf_range(-patrol_radius, patrol_radius), randf_range(-patrol_radius, patrol_radius))
-	_patrol_target = _spawn_position + offset
+	var target: Vector2 = _spawn_position + offset
+	_patrol_target = Vector2(
+		clampf(target.x, PATROL_ARENA_MIN.x, PATROL_ARENA_MAX.x),
+		clampf(target.y, PATROL_ARENA_MIN.y, PATROL_ARENA_MAX.y)
+	)
 
 ## Busca el Policía vivo más cercano dentro de faction_detection_range.
 func _find_nearby_rival() -> Node2D:

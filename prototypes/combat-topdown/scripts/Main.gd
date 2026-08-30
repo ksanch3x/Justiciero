@@ -249,15 +249,21 @@ func _spawn_police() -> void:
 	# no-letal implementado todavía (GDD 2.3), cualquier muerte cuenta.
 	police.died.connect(SaveManager.add_police_kill)
 	add_child(police)
-	police.global_position = Vector2(-350, -260)
+	# Acercada de (-350,-260): con patrol_radius=170 (Police.gd) esto
+	# solapa la zona de patrulla de los criminales de abajo — antes estaban
+	# tan lejos que nunca llegaban a cruzarse (bug: "no veo que
+	# interactúen con el resto").
+	police.global_position = Vector2(-100, -120)
 
 ## Dos criminales patrullando desde el arranque — junto con el policía de
 ## _spawn_police(), esto es lo mínimo para poder probar el Triángulo de
 ## Facciones (GDD Fase 4/sección 0 "minuto de diversión"): que se detecten
 ## entre sí y peleen sin que el jugador intervenga. Mismas simplificaciones
-## que _spawn_police(): fijos, no se reposicionan por sala.
+## que _spawn_police(): fijos, no se reposicionan por sala. Posiciones
+## acercadas al policía (ver comentario en _spawn_police()) para que sus
+## radios de patrulla (170px c/u) realmente se solapen.
 func _spawn_criminals() -> void:
-	var positions := [Vector2(300, -200), Vector2(320, 220)]
+	var positions := [Vector2(140, -100), Vector2(-20, 170)]
 	for pos in positions:
 		var criminal := criminal_scene.instantiate()
 		add_child(criminal)

@@ -1,6 +1,11 @@
 extends CharacterBody2D
 
-@export var speed: float = 220.0
+## Bajado de 220 (feedback jugando: "se supone que es sigiloso y uno
+## camina muy rápido") — el dash sigue dando el pico de velocidad para
+## escapar/reposicionar, la caminata normal ahora es más acorde a un
+## juego de sigilo. Primer ajuste, afinable si se siente demasiado lento
+## en combate directo.
+@export var speed: float = 170.0
 @export var max_health: int = 5
 @export var bullet_scene: PackedScene = preload("res://scenes/Bullet.tscn")
 
@@ -335,7 +340,22 @@ func _apply_dash_area_effect() -> void:
 			var push_dir := to_enemy.normalized()
 			if push_dir.length() < 0.1:
 				push_dir = Vector2.RIGHT
-			enemy.global_position += push_dir * dash_push_impulse
+			enemy.global_position = _clamp_to_arena(enemy.global_position + push_dir * dash_push_impulse)
+
+## Interior jugable real: arena 900x640 centrada en (0,0) menos el grosor
+## de las 4 paredes (40px, ver Main.WALL_THICKNESS) y un margen chico extra
+## — el empuje de dash/melee movía `global_position` directo (sin
+## move_and_slide, así que sin colisión) y podía tirar enemigos AFUERA de
+## las paredes si el golpe conectaba cerca del borde. Bug reportado
+## jugando: "lancé a algunos por fuera del marco de colisión".
+const ARENA_MIN: Vector2 = Vector2(-400, -270)
+const ARENA_MAX: Vector2 = Vector2(400, 270)
+
+func _clamp_to_arena(pos: Vector2) -> Vector2:
+	return Vector2(
+		clampf(pos.x, ARENA_MIN.x, ARENA_MAX.x),
+		clampf(pos.y, ARENA_MIN.y, ARENA_MAX.y)
+	)
 
 ## Aumenta la fuerza de shake actual (clamp a SHAKE_MAX en vez de sumar sin
 ## límite, para que golpes/disparos seguidos no disparen un temblor gigante).
@@ -383,16 +403,25 @@ func _melee_attack() -> void:
 		var to_enemy: Vector2 = enemy.global_position - global_position
 		var dist: float = to_enemy.length()
 		if dist <= melee_range and enemy.has_method("take_damage"):
+			var enemy_pos: Vector2 = enemy.global_position
 			enemy.take_damage(melee_damage)
-			var push_dir := to_enemy.normalized()
-			if push_dir.length() < 0.1:
-				push_dir = Vector2.RIGHT
-			enemy.global_position += push_dir * melee_knockback
+			# Golpe que mata != golpe cualquiera: reporta un ruido mucho más
+			# grande en la posición de la víctima, para que un policía cerca
+			# reaccione de inmediato aunque el melee en sí sea silencioso
+			# (bug reportado: "literal puedo matar a la vista del policía").
+			if is_instance_valid(enemy) and "health" in enemy and enemy.health <= 0:
+				FactionManager.report_noise(FactionManager.NOISE_KILL, enemy_pos)
+			if is_instance_valid(enemy):
+				var push_dir := to_enemy.normalized()
+				if push_dir.length() < 0.1:
+					push_dir = Vector2.RIGHT
+				enemy.global_position = _clamp_to_arena(enemy.global_position + push_dir * melee_knockback)
 	_play_melee_lunge()
 	_start_shake(1.5)
 	# GDD 2.2: melee es silencioso comparado con las armas de fuego (sin
 	# sistema de testigos todavía, así que por ahora es un ruido chico
-	# plano en vez de "silencioso salvo testigo").
+	# plano en vez de "silencioso salvo testigo"). Un asesinato ya reportó
+	# su propio ruido más grande arriba si corresponde.
 	FactionManager.report_noise(FactionManager.NOISE_MELEE, global_position)
 
 ## Canal de noqueo (GDD 2.3): mientras se mantiene "takedown" apuntando a un

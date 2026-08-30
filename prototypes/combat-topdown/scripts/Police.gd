@@ -26,7 +26,11 @@ enum State { PATROL, INVESTIGATE, PURSUE, ATTACK, FIGHT_RIVAL, FLEE }
 @export var contact_range: float = 22.0
 @export var attack_interval: float = 0.85
 @export var attack_telegraph_time: float = 0.3
-@export var patrol_radius: float = 90.0
+## Subido de 90: con radios chicos + spawns lejos entre sí, Policía y
+## Criminal nunca llegaban a cruzarse patrullando (bug reportado: "no veo
+## que interactúen con el resto"). Ver también Main._spawn_police()/
+## _spawn_criminals() para las posiciones de spawn, acercadas a propósito.
+@export var patrol_radius: float = 170.0
 ## Cuánto se queda "mirando alrededor" en el punto de ruido antes de
 ## rendirse y volver a PATROL, si el nivel de alerta no siguió subiendo.
 @export var investigate_timeout: float = 4.0
@@ -34,7 +38,7 @@ enum State { PATROL, INVESTIGATE, PURSUE, ATTACK, FIGHT_RIVAL, FLEE }
 ## cruce oportunista al patrullar/perseguir, no un imán que busca criminales
 ## por todo el mapa (eso volvería la pelea entre facciones demasiado
 ## frecuente y competiría con perseguir al jugador).
-@export var faction_detection_range: float = 90.0
+@export var faction_detection_range: float = 130.0
 @export var flee_speed: float = 130.0
 @export var flee_time: float = 3.0
 ## Por debajo de este % de vida MÁXIMA, un golpe de otra IA hace huir en
@@ -203,9 +207,19 @@ func _process_investigate(delta: float) -> void:
 		return
 	velocity = to_target.normalized() * speed
 
+## Clampeado dentro del interior jugable — ver comentario largo en
+## Enemy.gd (bug: patrulla podía apuntar detrás de una pared y quedar
+## atascado empujando contra ella).
+const PATROL_ARENA_MIN: Vector2 = Vector2(-400, -270)
+const PATROL_ARENA_MAX: Vector2 = Vector2(400, 270)
+
 func _pick_patrol_target() -> void:
 	var offset := Vector2(randf_range(-patrol_radius, patrol_radius), randf_range(-patrol_radius, patrol_radius))
-	_patrol_target = _spawn_position + offset
+	var target: Vector2 = _spawn_position + offset
+	_patrol_target = Vector2(
+		clampf(target.x, PATROL_ARENA_MIN.x, PATROL_ARENA_MAX.x),
+		clampf(target.y, PATROL_ARENA_MIN.y, PATROL_ARENA_MAX.y)
+	)
 
 ## Busca el Criminal vivo más cercano dentro de faction_detection_range.
 func _find_nearby_rival() -> Node2D:

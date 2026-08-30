@@ -652,6 +652,39 @@ necesitó knockback explícito — pueden superponerse del todo).
 
 ## Hallazgos de auditoría pendientes / conocidos (no bloqueantes)
 
+- ~~Empuje de melee/dash sacaba enemigos del mapa~~ — corregido:
+  `Player._clamp_to_arena()` clampea `global_position` después de todo
+  empuje directo (`_melee_attack()`, `_apply_dash_area_effect()`) dentro
+  del interior jugable real (`±400/±270`). El empuje muta `global_position`
+  a mano (sin `move_and_slide()`, así que sin colisión) — sin este clamp,
+  un golpe cerca del borde podía tirar al enemigo literalmente afuera de
+  las paredes. Bug reportado jugando: "lancé a algunos por fuera del marco
+  de colisión".
+- ~~Velocidad del jugador muy alta para un juego de sigilo~~ — `speed`
+  bajado de 220 a 170 en `Player.gd` (primer ajuste, afinable). Feedback:
+  "se supone que es sigiloso y uno camina muy rápido".
+- ~~Patrulla podía apuntar detrás de una pared~~ — corregido:
+  `_pick_patrol_target()` en `Enemy.gd`/`Spitter.gd`/`Police.gd`/
+  `Criminal.gd` ahora clampea el punto elegido al interior jugable
+  (`±400/±270`, misma constante que `Player._clamp_to_arena()`) — antes,
+  un spawn cerca de un borde podía generar un punto detrás de la pared,
+  y el bot quedaba empujando contra ella sin poder llegar nunca (se veía
+  "atascado"/errático). Feedback: "patrullan raro los policías".
+- ~~Policía y Criminal nunca se cruzaban~~ — corregido: `patrol_radius`
+  90→170 y `faction_detection_range` 90→130 en `Police.gd`/`Criminal.gd`,
+  más spawns acercados en `Main._spawn_police()`/`_spawn_criminals()`
+  (antes estaban a >600px entre sí, mucho más que la suma de sus radios de
+  patrulla — nunca podían encontrarse patrullando). Feedback: "no veo que
+  interactúen con el resto".
+- ~~Matar en silencio delante de un policía no generaba reacción~~ —
+  corregido: `FactionManager.NOISE_KILL` (70, nueva constante) — un golpe
+  que MATA reporta mucho más ruido que un golpe cualquiera
+  (`Player._melee_attack()`, chequea `enemy.health <= 0` después de
+  `take_damage()`), suficiente para cruzar el umbral de CHASE (55) desde
+  cero. Antes un asesinato silencioso generaba el mismo ruido chico
+  (`NOISE_MELEE=6`) que cualquier golpe, así que un policía parado al lado
+  literalmente no reaccionaba. Feedback: "literal puedo matar a la vista
+  del policía".
 - ~~Enemigos no colisionan entre sí~~ — corregido: `collision_mask` de
   Enemy/Runner/Spitter pasó a 10 (props + su propia layer), así se empujan
   entre sí en vez de apilarse. También se agregó telegraph visual (pulso

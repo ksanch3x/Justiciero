@@ -22,6 +22,14 @@ const LEVEL_THRESHOLDS: Array[float] = [0.0, 25.0, 55.0, 85.0]
 ## fuente hasta que haya Área2D de ruido real.
 const NOISE_GUNSHOT: float = 30.0
 const NOISE_MELEE: float = 6.0
+## Un asesinato (golpe que mata, no cualquier golpe) es mucho más ruidoso
+## que un simple impacto — GDD 2.2 "cuerpos descubiertos sube automático".
+## Suficiente para cruzar el umbral de CHASE (55) desde un medidor en 0,
+## para que un policía cerca reaccione de inmediato en vez de tener que
+## acumular varios golpes. Bug reportado jugando: "literal puedo matar a
+## la vista del policía" — antes matar solo generaba el mismo ruido chico
+## de un golpe cualquiera.
+const NOISE_KILL: float = 70.0
 
 ## Decae solo cuando no hubo ruido nuevo en los últimos `decay_hold_time`
 ## segundos — si no, un solo disparo se diluiría antes de que algo llegue
