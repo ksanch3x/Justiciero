@@ -464,19 +464,26 @@ func _set_takedown_tint(target: Node, on: bool) -> void:
 		return
 	visual.modulate = Color(0.4, 0.7, 1.0, 1.0) if on else Color(1.0, 1.0, 1.0, 1.0)
 
-## Solo enemigos que exponen knockout() son objetivo válido (Enemy.gd,
-## Spitter.gd, Police.gd, Criminal.gd) — no hace falta filtrar por tipo acá,
-## has_method ya lo resuelve.
+## Cualquier cosa que exponga knockout() es objetivo válido (Enemy.gd,
+## Spitter.gd, Police.gd, Criminal.gd, Civilian.gd) — has_method ya lo
+## resuelve, no hace falta filtrar por tipo.
+##
+## Incluye el grupo "civilian" a propósito: noquear a un testigo en vez de
+## matarlo es la decisión táctica que pide el GDD 2.3 (matarlo sube
+## Notoriedad persistente, noquearlo no). Los civiles NO están en el grupo
+## "enemy" justamente para que el melee de área no los mate sin querer, así
+## que hay que buscarlos aparte.
 func _find_takedown_target() -> Node:
 	var best: Node = null
 	var best_dist: float = takedown_range
-	for enemy in get_tree().get_nodes_in_group("enemy"):
-		if not is_instance_valid(enemy) or not enemy.has_method("knockout"):
-			continue
-		var d: float = (enemy.global_position - global_position).length()
-		if d <= best_dist:
-			best = enemy
-			best_dist = d
+	for group in ["enemy", "civilian"]:
+		for target in get_tree().get_nodes_in_group(group):
+			if not is_instance_valid(target) or not target.has_method("knockout"):
+				continue
+			var d: float = (target.global_position - global_position).length()
+			if d <= best_dist:
+				best = target
+				best_dist = d
 	return best
 
 ## Cobertura activa (GDD 2.3): true solo si el jugador está en cobertura Y

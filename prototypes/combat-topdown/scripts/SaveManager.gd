@@ -22,6 +22,11 @@ const KEY_NOTORIETY: String = "notoriety"
 
 ## Cuánto sube la Notoriedad por cada policía muerto por el jugador.
 const NOTORIETY_PER_POLICE_KILL: int = 1
+## Y por cada testigo civil. GDD 2.5 [Decidido]: cuenta matar policías Y
+## testigos civiles (no criminales — esos son un problema aparte, no algo
+## que el jugador "gane" por matarlos). Pesa menos que un policía: matar
+## al estado es peor que matar a un transeúnte, pero ninguno es gratis.
+const NOTORIETY_PER_CIVILIAN_KILL: int = 1
 ## Techo simple para que no crezca sin límite mientras no haya UI/tiers
 ## definidos (GDD 2.5 lo deja [Pendiente] explícitamente) — valor
 ## provisorio, fácil de subir/quitar cuando se definan los tiers reales.
@@ -35,7 +40,13 @@ func _ready() -> void:
 	_load_data()
 
 func add_police_kill() -> void:
-	notoriety = min(NOTORIETY_CAP, notoriety + NOTORIETY_PER_POLICE_KILL)
+	_add_notoriety(NOTORIETY_PER_POLICE_KILL)
+
+func add_civilian_kill() -> void:
+	_add_notoriety(NOTORIETY_PER_CIVILIAN_KILL)
+
+func _add_notoriety(amount: int) -> void:
+	notoriety = min(NOTORIETY_CAP, notoriety + amount)
 	_save_data()
 	notoriety_changed.emit(notoriety)
 

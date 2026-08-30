@@ -46,6 +46,12 @@ var _hold_timer: float = 0.0
 var last_noise_position: Vector2 = Vector2.ZERO
 
 signal level_changed(new_level: int, old_level: int)
+## Emitida en CADA report_noise(), con el punto y la magnitud. Permite que
+## algo reaccione al ruido en sí y no solo al nivel de Alerta agregado —
+## los testigos civiles la usan para entrar en pánico cerca de un disparo
+## o un asesinato (Civilian.gd). Se emite siempre, filtrar por distancia y
+## por magnitud es responsabilidad de quien escucha.
+signal noise_reported(position: Vector2, amount: float)
 
 func _process(delta: float) -> void:
 	if _hold_timer > 0.0:
@@ -63,6 +69,7 @@ func report_noise(amount: float, position: Vector2) -> void:
 	meter = min(100.0, meter + amount)
 	_hold_timer = decay_hold_time
 	last_noise_position = position
+	noise_reported.emit(position, amount)
 	_recompute_level()
 
 func _recompute_level() -> void:

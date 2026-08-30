@@ -386,6 +386,41 @@ todavía.
 HUD (`Main._update_hud()`): sufijo `"[Cobertura]"` mientras `in_cover` es
 `true`, para poder confirmar el estado jugando sin adivinar.
 
+### Testigos civiles (`scripts/Civilian.gd`/`scenes/Civilian.tscn`)
+GDD 2.2 + 2.5. No pelean ni hacen daño — existen para que la violencia
+tenga consecuencias. Dos funciones de diseño:
+- **Matarlos sube la Notoriedad persistente** (`SaveManager.
+  add_civilian_kill()`, conectada a `died` en `Main._spawn_civilians()`).
+  El GDD 2.5 decidió que cuenta matar policías Y testigos, no criminales.
+  Noquearlos NO la sube — misma separación `died` vs `knocked_out` que en
+  los otros scripts.
+- **Gritan al presenciar violencia**, lo que alerta a la policía aunque el
+  golpe haya sido silencioso. Es lo que hace que el melee deje de ser
+  gratis en una sala poblada.
+
+Mecanismo: `FactionManager` ahora emite `noise_reported(position, amount)`
+en cada `report_noise()`, y los civiles se suscriben. Escuchar la señal —
+en vez de que Player/Main avisen a mano— hace que funcione con CUALQUIER
+forma de matar (bala, melee, dash) sin hooks repartidos por los scripts de
+ataque. Un civil entra en pánico si el ruido supera
+`panic_noise_threshold` (25) y ocurre dentro de `witness_range` (260px):
+un disparo (30) y un asesinato (70) lo cruzan, un golpe melee (6) no —
+justo la distinción de sigilo que pide el GDD 2.2.
+
+**Cuidado con la realimentación**: `scream_noise` (22) está a propósito
+POR DEBAJO de `panic_noise_threshold` (25). Si fuera al revés, el grito de
+un civil haría gritar al de al lado y se realimentaría en cadena sin fin.
+Los gritos sí suben el medidor de Alerta (alertan a la policía), pero no
+propagan pánico entre civiles.
+
+**Grupos**: los civiles están en `"civilian"`, NO en `"enemy"` — el melee
+y el empujón de área del dash iteran `"enemy"`, y barrer el arma no debería
+matar transeúntes sin querer. Al civil hay que apuntarle: le pegan las
+balas (por layer física, `collision_layer=2` igual que los enemigos) o un
+takedown explícito. Por eso `Player._find_takedown_target()` escanea los
+dos grupos: noquear a un testigo en vez de matarlo es la decisión táctica
+que pide el GDD 2.3.
+
 ### Notoriedad (`scripts/SaveManager.gd`, autoload)
 GDD 2.5 — la stat que SÍ persiste entre corridas, a diferencia del Nivel de
 Alerta de `FactionManager.gd` (que es por misión y siempre arranca en 0).

@@ -5,6 +5,7 @@ extends Node2D
 @export var runner_scene: PackedScene = preload("res://scenes/Runner.tscn")
 @export var police_scene: PackedScene = preload("res://scenes/Police.tscn")
 @export var criminal_scene: PackedScene = preload("res://scenes/Criminal.tscn")
+@export var civilian_scene: PackedScene = preload("res://scenes/Civilian.tscn")
 
 ## Sprite del jefe: fila sin usar hasta ahora del pack (fila 3, "morada"),
 ## ver STATUS.md sección "Mapa de assets". Son tiles 24x24 completos, igual
@@ -134,6 +135,7 @@ func _ready() -> void:
 	_player.global_position = first_room["entry"]
 	_spawn_police()
 	_spawn_criminals()
+	_spawn_civilians()
 
 	# Menú principal primero (bloquea _process igual que _choosing_upgrade):
 	# recién al tocar "Jugar" arranca la pantalla de elegir arma inicial.
@@ -288,6 +290,18 @@ func _spawn_criminals() -> void:
 		var criminal := criminal_scene.instantiate()
 		add_child(criminal)
 		criminal.global_position = pos
+
+## Testigos civiles (GDD 2.2/2.5). No pelean: existen para que la
+## violencia tenga consecuencias — matarlos sube la Notoriedad persistente
+## y gritan al presenciar un asesinato, lo que alerta a la policía aunque
+## el golpe haya sido "silencioso". Ver Civilian.gd.
+func _spawn_civilians() -> void:
+	var positions := [Vector2(-260, 60), Vector2(-160, -60), Vector2(-40, 60)]
+	for pos in positions:
+		var civ := civilian_scene.instantiate()
+		civ.died.connect(SaveManager.add_civilian_kill)
+		add_child(civ)
+		civ.global_position = pos
 
 func _show_upgrade_selection() -> void:
 	if _player.has_wave_regen and _player.health < _player.max_health:

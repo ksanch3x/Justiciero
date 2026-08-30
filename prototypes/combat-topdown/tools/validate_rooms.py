@@ -271,13 +271,23 @@ def main():
                 f"Main._spawn_police: ({pol.group(1)}, {pol.group(2)}) "
                 f"cae fuera de room_1"
             )
-        crims = re.search(r"var positions := \[(.*?)\]", mt, re.S)
-        if crims:
-            for i, c in enumerate(_vectors(crims.group(1))):
+        # _spawn_criminals y _spawn_civilians usan ambos `var positions :=
+        # [...]`, asi que se buscan por nombre de funcion para poder
+        # nombrar cual falla.
+        for fname in ("_spawn_criminals", "_spawn_civilians"):
+            fm = re.search(
+                rf"func {fname}\(\).*?var positions := \[(.*?)\]", mt, re.S
+            )
+            if not fm:
+                continue
+            for i, c in enumerate(_vectors(fm.group(1))):
                 if not inside(c, r1, BODY_RADIUS):
                     problems.append(
-                        f"Main._spawn_criminals: positions[{i}] {c} "
-                        f"cae fuera de room_1"
+                        f"Main.{fname}: positions[{i}] {c} cae fuera de room_1"
+                    )
+                elif in_blocker(c, rooms["room_1"]["blockers"], BODY_RADIUS):
+                    problems.append(
+                        f"Main.{fname}: positions[{i}] {c} pisa un muro interior"
                     )
 
     # Alcanzabilidad desde room_1.
