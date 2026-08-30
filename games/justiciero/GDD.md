@@ -13,7 +13,7 @@
 
 Antes de programar todo a la vez, conviene tener claro el mínimo jugable que valida el concepto. "Justiciero" combina combate + sigilo + IA de facciones + generación procedural + meta-progresión — cada sistema es un proyecto no trivial por sí solo. Se recomienda la hoja de ruta por fases (sección 6) en vez de todo desde el día uno.
 
-**Pregunta a resolver antes de programar:** ¿cuál es el "minuto de diversión" del juego? Sigue **[Pendiente]** — próximo paso lógico de esta planificación.
+**"Minuto de diversión" — [Decidido]: el Triángulo de Facciones en acción** (sección 2.1). Ver a policía y bandas criminales generar caos entre sí sin intervención directa del jugador es "el corazón del gancho del juego" según la sección 2.1 — es el sistema que hay que pulir primero como núcleo, por encima de sigilo/Alerta o de combate/progresión permanente (que siguen siendo necesarios, pero como soporte del gancho principal, no como el gancho en sí). Esto reordena la prioridad práctica dentro de la Fase 4 de la hoja de ruta (sección 6): dentro de esa fase, la interacción policía↔criminales es lo primero que debe sentirse bien, antes de pulir el resto.
 
 ---
 
@@ -96,15 +96,16 @@ Sistema central del juego — la razón por la que el jugador vuelve tras morir.
 
 **Efecto en la dificultad:** el contenido no escala hacia arriba — el jugador escala hacia el contenido, con una dificultad fija bien calibrada para "árbol vacío". Esto simplifica el diseño de misiones: no hace falta dificultad dinámica.
 
-### 2.5 Sistema de Notoriedad (NUEVO — [Decidido] el mecanismo, [Pendiente] los números)
+### 2.5 Sistema de Notoriedad (NUEVO — [Decidido] el mecanismo y los números)
 
 Introducido para resolver la tensión entre "matar sube la dificultad futura" y el pilar de "la Reputación nunca baja". Es una **segunda estadística, separada de la Reputación**:
 
 - **Persistente entre incursiones** (a diferencia del Nivel de Alerta, que es por misión).
-- Sube cuando el jugador **mata** policías (noquear no la sube).
+- Sube cuando el jugador **mata** policías **o testigos civiles** — **[Decidido]**: no se limita a policía, matar testigos también sube Notoriedad (noquear no la sube en ningún caso). Mantiene el tono "GTA" de consecuencias por violencia indiscriminada, no solo por enfrentarse al estado. Los criminales quedan fuera — son un problema aparte del jugador, no algo que el jugador "gane" por matarlos.
 - Efecto: sube el nivel base de Alerta / cantidad de refuerzos en incursiones futuras — el mundo se vuelve más hostil, sin tocar la Reputación ni el Árbol.
-- **Se puede reducir con una acción en el Hub** — mecanismo exacto **[Pendiente]**: se estaba evaluando entre pagar con Dinero (rápido, cuesta más por tier), una misión especial de "bajo perfil" (gratis pero más lenta), o ambas opciones disponibles en paralelo.
-- **[Pendiente]:** ¿tiene techo máximo además de la posibilidad de bajarla? ¿Cuántos tiers tiene y qué cambia mecánicamente en cada uno? ¿Cuenta solo matar policías, o también criminales/testigos?
+- **Reducción en el Hub — [Decidido]: ambas vías en paralelo.** Pagar con Dinero (rápido, cuesta más por tier) y una misión especial de "bajo perfil" (gratis pero más lenta) están disponibles al mismo tiempo — el jugador elige entre gastar dinero para ir rápido o gastar tiempo para ir gratis.
+- **Tiers y techo — [Decidido]: 3 tiers con techo** (Bajo/Medio/Alto). Cada tier sube la Alerta base/refuerzos de la incursión siguiente; el tier más alto tiene techo (no escala sin límite). Simple de balancear y de comunicar al jugador vs. una escala granular de 5+ tiers.
+- **Prototipo actual** (`prototypes/combat-topdown/scripts/SaveManager.gd`): ya implementa la mitad "sube y persiste" con un solo policía y un techo numérico provisorio (20, sin tiers todavía) — falta trasladar el modelo de 3 tiers, sumar testigos civiles como fuente, y construir el Hub real para alojar las dos vías de reducción.
 
 ---
 
@@ -193,12 +194,10 @@ Usar `InputMap` de Godot con acciones abstractas (`mover_arriba`, `atacar`, etc.
 
 ## 7. Preguntas Abiertas Restantes
 
-- **Notoriedad:** mecanismo exacto de reducción en el Hub (¿pagar con Dinero, misión de "bajo perfil", o ambas?).
-- **Notoriedad:** techo máximo, tiers concretos, y qué cambia mecánicamente en cada uno.
-- **Notoriedad:** alcance — ¿solo cuenta matar policías, o también criminales/testigos?
-- **Pack de personajes:** fuente para sprites animados 8-direcciones de Jugador/Policía/Criminales.
-- **"Minuto de diversión":** definir el prototipo mínimo (Fase 1) — qué sistema prototipar primero.
-- **Riesgo de balance:** calibrar la dificultad con el árbol vacío (primer intento) sigue siendo el trabajo de diseño más delicado del proyecto.
+Las 5 preguntas de esta lista quedaron resueltas — ver sección 2.5 (Notoriedad: mecanismo de reducción, tiers/techo, alcance) y sección 0 ("minuto de diversión"). Queda una sola pendiente real:
+
+- **Pack de personajes — [Decidido, provisorio]: seguir con placeholders de color por ahora.** No es prioridad mientras se siguen probando mecánicas — los tintes de color (como ya se hizo con `Police.gd`, que reusa el sprite del jugador teñido de azul) alcanzan. Elegir una fuente real de sprites 8-direcciones (Idle/Walk/Attack/Dash) para Jugador/Policía/Criminales queda para cuando el arte importe más que la funcionalidad — no bloquea ningún sistema pendiente.
+- **Riesgo de balance:** calibrar la dificultad con el árbol vacío (primer intento) sigue siendo el trabajo de diseño más delicado del proyecto — no es una pregunta que se "resuelva" de una vez, es un ajuste continuo a medida que haya más sistemas jugables.
 
 ---
 
@@ -213,3 +212,8 @@ Usar `InputMap` de Godot con acciones abstractas (`mover_arriba`, `atacar`, etc.
 | 5 | Gamepad | InputMap desde el inicio (soporta ambos), pulido de mando después |
 | 6 | Cobertura | Mecánica activa — "pegarse a cobertura" |
 | 7 | Assets de entorno | Kenney "Roguelike Modern City" (Hub) + "Roguelike Indoors" (misiones), CC0, 16x16 |
+| 8 | Reducción de Notoriedad | Pagar con Dinero + misión de "bajo perfil", ambas vías en paralelo |
+| 9 | Tiers de Notoriedad | 3 tiers (Bajo/Medio/Alto) con techo en el tier más alto |
+| 10 | Alcance de Notoriedad | Cuenta matar policías y testigos civiles (no criminales) |
+| 11 | Pack de personajes | Placeholders de color por ahora (no bloquea desarrollo) |
+| 12 | "Minuto de diversión" | El Triángulo de Facciones en acción — núcleo a pulir primero |
