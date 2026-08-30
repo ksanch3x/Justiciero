@@ -8,12 +8,24 @@ el código, que documentan simplificaciones deliberadas.
 
 ## Qué es esto
 
-Roguelite top-down shooter de oleadas, Godot 4.3 (GL Compatibility). Sirve
-para validar mecánicas de combate antes de construir el juego grande
-(`games/justiciero/`, ver su `GDD.md`) — **no** hay que mantener fidelidad al
-GDD grande acá; este prototipo tiene su propio diseño, más simple y más
-arcade. Progresión **no persistente**: todo se resetea con `R`
-(`get_tree().reload_current_scene()`).
+Roguelite top-down, Godot 4.3 (GL Compatibility).
+
+**Cambió el rol de este prototipo.** Nació como un arena shooter de oleadas
+para validar combate, con diseño propio y explícitamente SIN fidelidad al
+GDD grande. Hoy se está convirtiendo en Justiciero de verdad: sigue la
+hoja de ruta de `games/justiciero/GDD.md` (fases 1-6 hechas, ver
+`ROADMAP.md`) e implementa sus sistemas —Alerta, Triángulo de Facciones,
+Notoriedad, cobertura, letal vs. no letal— con los nombres y las reglas
+que el GDD define. Cuando algo se aparta del GDD, está anotado abajo con
+el motivo.
+
+Progresión: el árbol de mejoras sigue siendo **por corrida** (se pierde al
+morir, `R` recarga la escena), pero la **Notoriedad sí persiste en disco**
+entre partidas (`SaveManager`, `user://justiciero_save.cfg`).
+
+- **`ROADMAP.md`** — dónde estamos, qué falta, limitaciones conocidas.
+  Empezar por ahí.
+- **Este archivo** — cómo funciona cada sistema y por qué se hizo así.
 
 Escena principal: `scenes/Main.tscn`. Assets: `assets/desert-shooter-pack/`
 (Kenney, CC0) — ver sección "Mapa de assets" abajo, ya se investigó qué hay
