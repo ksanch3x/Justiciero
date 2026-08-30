@@ -17,6 +17,10 @@ var _telegraphing: bool = false
 var _telegraph_time_left: float = 0.0
 
 signal died
+## Emitida en take_damage() (tanto en daño normal como en el golpe que mata,
+## con health ya clampeado a 0) para que quien quiera una barra de vida
+## (el jefe, ver Main._spawn_boss()) no tenga que leer `health` por polling.
+signal health_changed(current: int, max_health: int)
 
 @onready var _anim: AnimatedSprite2D = $Visual
 
@@ -57,7 +61,10 @@ func _physics_process(delta: float) -> void:
 func take_damage(amount: int) -> void:
 	health -= amount
 	if health <= 0:
+		health = 0
+		health_changed.emit(health, max_health)
 		died.emit()
 		Fx.play_death(self, _anim)
 		return
+	health_changed.emit(health, max_health)
 	Fx.flash_damage(_anim)

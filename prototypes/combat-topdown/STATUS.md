@@ -29,7 +29,7 @@ scripts/
   Spitter.gd      — enemigo a distancia, script propio (no hereda de Enemy.gd)
   Bullet.gd       — proyectil (Area2D), reusado por jugador y Spitter
   Main.gd         — spawner de oleadas, HUD, salas/puertas/jefe
-  RoomData.gd     — datos estáticos de las 4 salas de la mazmorra (oleadas, enemigos, props, puertas, tinte)
+  RoomData.gd     — datos estáticos de las 7 salas de la mazmorra (oleadas, enemigos, props, puertas, tinte)
   UpgradeTree.gd  — árbol de mejoras de la corrida (25 nodos, 3 ramas, filtrado por arma)
   UpgradeUI.gd    — panel de selección (elección inicial / mejoras / hito de arma)
   WeaponData.gd   — roster de armas (5 armas x 2 niveles), stats y sprites
@@ -195,27 +195,39 @@ comentario en `Main._pick_enemy_scene()`).
   enemigos (rojo tenue). Textura de luz generada (`assets/generated/light_glow.tres`,
   `GradientTexture2D` radial), no es un asset de imagen.
 
-### Salas encadenadas, puertas y jefe (primera versión, sin camera-follow)
-Primer intento de "mazmorra con salas y elección de puerta", deliberadamente
-simple: **sin escenas nuevas** (todo redecora la misma `Main.tscn`), **sin
-generación procedural real** (4 salas fijas) y **sin camera-follow** (la
-cámara sigue centrada en el jugador con los mismos `limit_*` de siempre,
-porque las 4 salas comparten exactamente la geometría 900x640 de antes).
+### Salas encadenadas, puertas y jefe (v2, cierre del demo)
+"Mazmorra con salas y elección de puerta", deliberadamente simple: **sin
+escenas nuevas** (todo redecora la misma `Main.tscn`), **sin generación
+procedural real** (7 salas fijas) y **sin camera-follow** (la cámara sigue
+centrada en el jugador con los mismos `limit_*` de siempre, porque las 7
+salas comparten exactamente la geometría 900x640 de antes). v1 (commit
+`7dbd3fa`) tenía 4 salas y terminaba muy rápido (~6 oleadas); v2 estira el
+recorrido a 7 salas (15 oleadas + jefe) con **dos** bifurcaciones en vez de
+una, y le agrega barra de vida visible al jefe (feedback tras jugar v1: el
+demo terminaba rápido y no se veía cuánto le faltaba al jefe).
 
-- **`scripts/RoomData.gd`** (nuevo, mismo patrón estático que
-  `UpgradeTree.gd`): 4 salas fijas — `room_1` (solo Grunt, 2 oleadas,
-  bifurca Este→`room_2a`/Oeste→`room_2b`) → `room_2a` (Grunt+Runner, tinte
-  cálido) o `room_2b` (Grunt+Runner+Spitter, tinte frío), cada una con 2
-  oleadas y 1 puerta Este → `room_boss` (sin oleadas, spawnea el jefe
-  directo, tinte rojo oscuro, 2 props menos para dejar espacio de
-  movimiento). Cada sala define `waves`, `enemy_types` (subconjunto de
+- **`scripts/RoomData.gd`** (mismo patrón estático que `UpgradeTree.gd`): 7
+  salas fijas en cadena con dos bifurcaciones:
+  ```
+  room_1 (2 oleadas, solo grunt)
+    ├─ east → room_2a (2 oleadas, +runner, tinte cálido)
+    └─ west → room_2b (2 oleadas, +runner+spitter, tinte frío)
+         ambas → room_3 (3 oleadas, los 3 tipos, puerta única)
+                ├─ east → room_4a (3 oleadas, escalado denso, tinte magenta)
+                └─ west → room_4b (3 oleadas, escalado denso, tinte cian)
+                     ambas → room_boss (puerta única)
+  ```
+  Cada sala define `waves`, `enemy_types` (subconjunto de
   Grunt/Runner/Spitter, además del gate normal por `wave_number` que ya
   existía — una sala puede estar "por debajo" de lo que la oleada global
   habilitaría), `doors` (lado → sala destino; 1 entrada = puerta única sin
   UI, 2 entradas = elegir), `props` (5 entradas, una por cada
   `StaticBody2D` fijo de `Props`, con posición/visibilidad — se reposicionan
   los mismos 5 nodos, no se instancian nuevos) y `tint` opcional para el
-  `CanvasModulate`.
+  `CanvasModulate`. `Main._open_room_doors()`/`_transition_to_room()` ya
+  eran genéricos sobre cualquier `doors` de 1 o 2 entradas y cualquier
+  cadena de `id`s desde v1 — agregar `room_3`/`room_4a`/`room_4b` fue 100%
+  datos nuevos, sin tocar `Main.gd` para esta parte.
 - **`Main.gd`**: `wave_number`/`MILESTONE_EVERY` siguen intactos y globales
   a toda la corrida (el escalado y los hitos no se tocaron). Se agregó
   `waves_in_room` (se resetea a 0 en cada transición): cuando una sala
@@ -255,6 +267,38 @@ porque las 4 salas comparten exactamente la geometría 900x640 de antes).
   cual: `_on_boss_died()` detiene el spawner (`set_process(false)`) y
   cambia el HUD a "¡Jefe derrotado! Presioná R para reiniciar." — reusa el
   `R` que ya existía, sin pantalla de victoria nueva.
+- **Barra de vida del jefe** (v2, `Enemy.gd` gana `signal
+  health_changed(current, max_health)`, emitida en `take_damage()` — tanto
+  en daño normal como en el golpe que mata, con `health` clampeado a 0 antes
+  de emitir para que la barra llegue a "vacía" de verdad en vez de quedar en
+  un pixel de relleno). `Main._spawn_boss()` conecta esa señal a
+  `_on_boss_health_changed()` y arma la barra con
+  `_make_boss_health_bar()`: **no** es un `ProgressBar` genérico, son tiles
+  reales del UI kit del pack (ver "Mapa de assets — UI kit" abajo) — una
+  fila de tiles gris (fondo, fijo) y una fila de tiles naranja (relleno)
+  superpuesta, la de relleno envuelta en un `Control` con
+  `clip_contents=true` cuyo `size.x` se achica proporcional a
+  `current/max_health` en cada `_on_boss_health_changed()`. Se eligió
+  recortar el contenedor (no `region_rect` de una textura) porque la barra
+  está armada de varios tiles pegados (cap izq + N repeticiones de relleno +
+  cap der), no es una sola imagen continua — así ningún tile individual se
+  estira ni se distorsiona al vaciarse, solo se revela menos cantidad de
+  ellos. Nace en `_spawn_boss()`, se libera (`queue_free()`) en
+  `_on_boss_died()` — visible solo durante la pelea.
+- **Menú principal** (v2, `Main._show_main_menu()`): primera pantalla del
+  demo, corre antes que "Elegí tu arma inicial" (`_ready()` ahora llama
+  `_show_main_menu()` en vez de arrancar directo la elección de arma; el
+  paso de elegir arma se movió a `_start_weapon_pick()`, disparado por el
+  botón "Jugar"). `CanvasLayer` construido por código (mismo criterio que
+  `UpgradeUI.gd`, sin `sub_resource` nuevo en `.tscn`): panel centrado con
+  `NinePatchRect` (textura compuesta en código a partir de 9 tiles del pack,
+  ver "UI kit" abajo — `patch_margin_*=16` para que estire limpio), título
+  "JUSTICIERO" con `_make_bitmap_text()` (helper nuevo, ensambla texto con
+  la fuente sprite del pack — no hay `.ttf`, es fuente bitmap) y un único
+  botón "JUGAR" (`_make_menu_button()`, versión mínima del patrón
+  tarjeta-botón de `UpgradeUI._make_card_button()`, con el mismo cuidado de
+  `MOUSE_FILTER_IGNORE` en todo hijo de un `Button`). Sin "Salir" (demo de
+  navegador/editor) ni opciones — un botón, directo a jugar.
 - **`UpgradeUI.gd`**: `show_choices(player, mode, doors)` gana un modo
   `"door_pick"` (parámetro `doors` nuevo, opcional, con default `{}` para
   no romper las llamadas existentes de `weapon_pick`/`milestone`/
@@ -268,7 +312,9 @@ porque las 4 salas comparten exactamente la geometría 900x640 de antes).
   distancia/invocación), generación procedural real.
 - **Sin verificar jugando** (no hay Godot en este entorno): que el hueco
   de puerta se vea/sienta bien al cruzar, que el jefe se vea claramente
-  más grande, y que morir/ganarle cierre la demo correctamente.
+  más grande, que morir/ganarle cierre la demo correctamente, que la barra
+  de vida del jefe se vea bien y baje visiblemente con cada golpe, y que el
+  menú principal (panel/fuente bitmap/botón) se vea y clickee bien.
 
 ## Capas de colisión (importante para no romper nada al agregar cosas)
 
@@ -347,7 +393,33 @@ necesitó knockback explícito — pueden superponerse del todo).
 - `Tiles/`: 234 tiles 16x16, set de bloques/terreno variado (no es "arena"
   homogénea) — los índices usados para el piso están documentados en la
   sección Escenario arriba.
-- `UI/`: 198 tiles 16x16, no usado todavía en este prototipo.
+- `UI/` (198 tiles 16x16, usado desde v2 para barra de vida del jefe +
+  menú principal — índices verificados armando un montage etiquetado con
+  Python/PIL y leyéndolo tile por tile, **no** son los rangos aproximados
+  de la primera exploración del pack):
+  - **Paneles de botón/tarjeta** (`tile_0000`-`tile_0053`): 5 recuadros de
+    color (amarillo/rojo/gris/naranja/azul) de 3x2 tiles cada uno más un
+    dial circular — están pensados para tarjetas chicas (96x32px), **no**
+    tienen fila central de relleno propia, no sirven como panel grande
+    9-slice.
+  - **Panel 9-slice real** (`tile_0069`-`tile_0071`, `tile_0087`-`tile_0089`,
+    `tile_0105`-`tile_0107`): único grupo de 9 tiles con esquinas + bordes +
+    **centro** sólido distinto (relleno negro, borde blanco redondeado) —
+    el que se usa para el panel del menú principal. `Main._make_panel_texture()`
+    los compone en una `Image` de 48x48 y arma un `ImageTexture`, consumido
+    por un `NinePatchRect` con `patch_margin_*=16`.
+  - **Fuente bitmap** (dígitos `tile_0093`-`tile_0102` = "0"-"9", letras
+    `tile_0108`-`tile_0120` = "A"-"M", `tile_0126`-`tile_0138` = "N"-"Z";
+    hay una segunda copia idéntica en `tile_0144`-`tile_0179`, sin usar):
+    fondo morado con borde, sin minúsculas ni signos de puntuación.
+    `Main.FONT_CHAR_INDEX` + `Main._make_bitmap_text()`.
+  - **Barras de 3 piezas** (cap izq / relleno repetible / cap der): set gris
+    "vacío" en `tile_0065`/`0066`/`0067` (con remaches, pensado como fondo)
+    y set naranja "relleno" en `tile_0139`/`0140`/`0142` (`tile_0143` es una
+    pieza chica aparte, un "pip", no forma parte de la barra). Hay variantes
+    duplicadas en azul (`0157`/`0158`/`0160`) y naranja corta
+    (`0175`/`0176`/`0178`), sin usar. `Main._make_bar_row()` +
+    `Main._make_boss_health_bar()`.
 
 ## Hallazgos de auditoría pendientes / conocidos (no bloqueantes)
 

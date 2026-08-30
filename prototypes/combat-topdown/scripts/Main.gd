@@ -59,6 +59,45 @@ const WALL_COLOR: Color = Color(0.278431, 0.196078, 0.294118, 1)
 const DOOR_GAP_HALF_HEIGHT: float = 70.0
 const SIDE_TO_WALL: Dictionary = {"east": "East", "west": "West"}
 
+## --- UI kit del pack (assets/desert-shooter-pack/UI/, 198 tiles 16x16,
+## nunca usado hasta el cierre del demo v2). Índices verificados armando un
+## montage etiquetado con Python/PIL y leyéndolo tile por tile — NO son los
+## rangos aproximados de la primera exploración (ver STATUS.md "Mapa de
+## assets — UI kit" para el detalle completo). ---
+const UI_TILE_DIR: String = "res://assets/desert-shooter-pack/UI/"
+
+## Fuente bitmap: dígitos y A-Z, fondo morado con borde, ~14x16px por glifo.
+## No hay minúsculas ni signos de puntuación en el pack — el título/botón de
+## esta pantalla no los necesita.
+const FONT_CHAR_INDEX: Dictionary = {
+	"0": 93, "1": 94, "2": 95, "3": 96, "4": 97, "5": 98, "6": 99, "7": 100, "8": 101, "9": 102,
+	"A": 108, "B": 109, "C": 110, "D": 111, "E": 112, "F": 113, "G": 114, "H": 115, "I": 116,
+	"J": 117, "K": 118, "L": 119, "M": 120, "N": 126, "O": 127, "P": 128, "Q": 129, "R": 130,
+	"S": 131, "T": 132, "U": 133, "V": 134, "W": 135, "X": 136, "Y": 137, "Z": 138,
+}
+
+## Panel de fondo del menú: único grupo de 9 tiles del pack con relleno
+## sólido + centro distinto de los bordes (3x3 real, no un "3x2 de 2 tarjetas
+## de botón" como los otros paneles del pack) — por eso es el candidato para
+## un NinePatchRect de verdad. Orden: fila por fila, izq a der.
+const PANEL_TILE_INDICES: Array[int] = [69, 70, 71, 87, 88, 89, 105, 106, 107]
+const PANEL_TILE_PX: int = 16
+
+## Barra de 3 piezas (cap izq / relleno repetible / cap der), set "corto"
+## (gris para el fondo vacío, naranja para el relleno) — ver STATUS.md.
+const BAR_BG_CAP_L: int = 65
+const BAR_BG_MID: int = 66
+const BAR_BG_CAP_R: int = 67
+const BAR_FILL_CAP_L: int = 139
+const BAR_FILL_MID: int = 140
+const BAR_FILL_CAP_R: int = 142
+const BAR_MID_SEGMENTS: int = 8
+const BAR_CELL_SIZE: float = 20.0
+
+var _boss_bar_bg: Control = null
+var _boss_bar_fill_clip: Control = null
+var _boss_bar_full_width: float = 0.0
+
 @onready var _player: CharacterBody2D = $Player
 @onready var _hud: Label = $HUD/Label
 @onready var _spawn_points: Node2D = $SpawnPoints
@@ -75,9 +114,17 @@ func _ready() -> void:
 
 	_apply_room(RoomData.get_room(current_room_id))
 
-	# Pantalla inicial: elegir arma cuerpo a cuerpo antes de la oleada 1.
-	# wave_number sigue en 0 mientras tanto (ver _update_hud, que muestra un
-	# texto fijo en ese estado en vez de "Oleada: 0").
+	# Menú principal primero (bloquea _process igual que _choosing_upgrade):
+	# recién al tocar "Jugar" arranca la pantalla de elegir arma inicial.
+	_choosing_upgrade = true
+	_hud.text = ""
+	_show_main_menu()
+
+## Pantalla inicial: elegir arma cuerpo a cuerpo antes de la oleada 1.
+## wave_number sigue en 0 mientras tanto (ver _update_hud, que muestra un
+## texto fijo en ese estado en vez de "Oleada: 0"). Se llama desde el botón
+## "Jugar" del menú principal, no desde _ready() directamente.
+func _start_weapon_pick() -> void:
 	_choosing_upgrade = true
 	_hud.text = "Elegí tu arma inicial"
 	_upgrade_ui.show_choices(_player, "weapon_pick")
@@ -352,6 +399,7 @@ func _spawn_boss() -> void:
 	boss.attack_interval = 1.1
 	boss.attack_telegraph_time = 0.35
 	boss.died.connect(_on_boss_died)
+	boss.health_changed.connect(_on_boss_health_changed)
 
 	add_child(boss)
 	boss.global_position = Vector2(0, -150)
@@ -368,6 +416,8 @@ func _spawn_boss() -> void:
 
 	_boss = boss
 	_hud.text = "Sala del Jefe — ¡Derrotalo!   Vida: %d/%d" % [_player.health, _player.max_health]
+	_make_boss_health_bar()
+	_on_boss_health_changed(boss.health, boss.max_health)
 
 ## SpriteFrames construido en código (no sub_resource de .tscn) con el
 ## sprite sin usar hasta ahora del pack, ver comentario junto a BOSS_TEX_*.
@@ -385,6 +435,10 @@ func _on_boss_died() -> void:
 	_boss_mode = false
 	set_process(false)
 	_hud.text = "¡Jefe derrotado! Presioná R para reiniciar."
+	if is_instance_valid(_boss_bar_bg):
+		_boss_bar_bg.queue_free()
+	_boss_bar_bg = null
+	_boss_bar_fill_clip = null
 
 func _on_player_health_changed(_current: int, _max_hp: int) -> void:
 	_update_hud()
@@ -422,3 +476,210 @@ func _update_hud() -> void:
 			ammo_text = "   Munición: %d/%d" % [_player.current_ammo, _player.current_mag_size]
 
 	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text]
+
+# ---------------------------------------------------------------------------
+# UI kit del pack (barra de vida del jefe, menú principal) — ver STATUS.md
+# "Mapa de assets — UI kit" para el detalle de qué es cada tile.
+# ---------------------------------------------------------------------------
+
+## `load()` en vez de `preload()`: son ~40 rutas distintas (fuente + barra +
+## panel) armadas desde índices de un Dictionary/Array — preload exige una
+## ruta constante literal, no sirve para esto. Godot cachea `load()` de todas
+## formas, no hay costo real por reusar el mismo índice varias veces.
+func _ui_tex(index: int) -> Texture2D:
+	return load(UI_TILE_DIR + "tile_%04d.png" % index)
+
+## Fila de tiles pegados sin separación (usada tanto para el fondo gris como
+## para el relleno naranja de la barra de vida): cap izq + N tiles de
+## relleno repetido + cap der, todos cuadrados de `cell_size` px.
+func _make_bar_row(cap_l: int, mid: int, cap_r: int, mid_count: int, cell_size: float) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var indices: Array[int] = [cap_l]
+	for i in range(mid_count):
+		indices.append(mid)
+	indices.append(cap_r)
+
+	for idx in indices:
+		var tr := TextureRect.new()
+		tr.custom_minimum_size = Vector2(cell_size, cell_size)
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.texture = _ui_tex(idx)
+		row.add_child(tr)
+
+	return row
+
+## Barra de vida del jefe: fondo gris fijo + relleno naranja recortado por el
+## ancho de un Control con `clip_contents=true` (no `region_rect`: la barra
+## está armada de varios tiles pegados, no es una sola textura continua, así
+## que recortar el contenedor que los agrupa es más simple y no distorsiona
+## ningún tile individual). El relleno se dibuja completo por debajo del
+## recorte y se "vacía" achicando el ancho del contenedor desde la derecha —
+## se ve igual que si drenara, sin estirar ni comprimir ningún tile.
+func _make_boss_health_bar() -> void:
+	var total_width: float = (BAR_MID_SEGMENTS + 2) * BAR_CELL_SIZE
+	_boss_bar_full_width = total_width
+
+	var root := Control.new()
+	root.name = "BossHealthBar"
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.anchor_left = 0.5
+	root.anchor_right = 0.5
+	root.offset_left = -total_width / 2.0
+	root.offset_right = total_width / 2.0
+	root.offset_top = 54.0
+	root.offset_bottom = 54.0 + BAR_CELL_SIZE
+	_hud.get_parent().add_child(root)
+
+	var bg := _make_bar_row(BAR_BG_CAP_L, BAR_BG_MID, BAR_BG_CAP_R, BAR_MID_SEGMENTS, BAR_CELL_SIZE)
+	root.add_child(bg)
+
+	var fill_clip := Control.new()
+	fill_clip.name = "FillClip"
+	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fill_clip.clip_contents = true
+	fill_clip.position = Vector2.ZERO
+	fill_clip.size = Vector2(total_width, BAR_CELL_SIZE)
+	root.add_child(fill_clip)
+
+	var fill := _make_bar_row(BAR_FILL_CAP_L, BAR_FILL_MID, BAR_FILL_CAP_R, BAR_MID_SEGMENTS, BAR_CELL_SIZE)
+	fill_clip.add_child(fill)
+
+	_boss_bar_bg = root
+	_boss_bar_fill_clip = fill_clip
+
+func _on_boss_health_changed(current: int, max_hp: int) -> void:
+	if not is_instance_valid(_boss_bar_fill_clip):
+		return
+	var pct: float = 0.0
+	if max_hp > 0:
+		pct = clampf(float(current) / float(max_hp), 0.0, 1.0)
+	_boss_bar_fill_clip.size = Vector2(_boss_bar_full_width * pct, BAR_CELL_SIZE)
+
+## Compone los 9 tiles del panel (ver PANEL_TILE_INDICES) en una única
+## Image de 48x48 y la envuelve en un ImageTexture — así el NinePatchRect
+## de _show_main_menu() puede tratarlo como una textura de verdad con
+## `patch_margin_*` en vez de necesitar 9 nodos separados.
+func _make_panel_texture() -> ImageTexture:
+	var full := Image.create(PANEL_TILE_PX * 3, PANEL_TILE_PX * 3, false, Image.FORMAT_RGBA8)
+	for i in range(PANEL_TILE_INDICES.size()):
+		var tile_img: Image = _ui_tex(PANEL_TILE_INDICES[i]).get_image()
+		tile_img = tile_img.duplicate()
+		tile_img.convert(Image.FORMAT_RGBA8)
+		var col: int = i % 3
+		var row: int = i / 3
+		full.blit_rect(tile_img, Rect2i(0, 0, PANEL_TILE_PX, PANEL_TILE_PX), Vector2i(col * PANEL_TILE_PX, row * PANEL_TILE_PX))
+	return ImageTexture.create_from_image(full)
+
+## Ensambla texto con la fuente bitmap del pack (solo A-Z y 0-9, ver
+## FONT_CHAR_INDEX — no hay minúsculas ni signos): un TextureRect por
+## carácter en un HBoxContainer, espacio real para " " (un Control vacío del
+## mismo ancho de celda). Caracteres sin mapeo (no debería pasar con los
+## textos de esta pantalla) se saltean en silencio.
+func _make_bitmap_text(text: String, cell_size: float) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(cell_size * 0.15))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	for ch in text.to_upper():
+		if ch == " ":
+			var spacer := Control.new()
+			spacer.custom_minimum_size = Vector2(cell_size * 0.6, cell_size)
+			spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_child(spacer)
+			continue
+		if not FONT_CHAR_INDEX.has(ch):
+			continue
+		var tr := TextureRect.new()
+		tr.custom_minimum_size = Vector2(cell_size, cell_size)
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.texture = _ui_tex(FONT_CHAR_INDEX[ch])
+		row.add_child(tr)
+
+	return row
+
+## Botón mínimo con el mismo criterio de MOUSE_FILTER_IGNORE que
+## UpgradeUI._make_card_button() (todo hijo de un Button necesita
+## MOUSE_FILTER_IGNORE o el click deja de registrar en silencio) pero sin
+## reusar ese método directamente: vive en otro nodo (UpgradeUI, no Main) y
+## esta pantalla solo necesita un botón de texto simple, no la tarjeta con
+## ícono+descripción.
+func _make_menu_button(label: String) -> Button:
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(200, 56)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(center)
+
+	var text_row := _make_bitmap_text(label, 18.0)
+	center.add_child(text_row)
+
+	return btn
+
+## Menú principal, primera pantalla del demo (antes de "Elegí tu arma
+## inicial"): CanvasLayer con panel 9-slice centrado, título en la fuente
+## bitmap del pack y un único botón "Jugar" — sin "Salir" ni opciones, a
+## propósito (ver plan v2, Cambio 3). Oculta el menú y dispara
+## _start_weapon_pick() al tocar el botón.
+func _show_main_menu() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "MainMenu"
+	add_child(layer)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(dim)
+
+	var panel_w := 420.0
+	var panel_h := 300.0
+	var panel := NinePatchRect.new()
+	panel.texture = _make_panel_texture()
+	panel.patch_margin_left = PANEL_TILE_PX
+	panel.patch_margin_right = PANEL_TILE_PX
+	panel.patch_margin_top = PANEL_TILE_PX
+	panel.patch_margin_bottom = PANEL_TILE_PX
+	panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -panel_w / 2.0
+	panel.offset_right = panel_w / 2.0
+	panel.offset_top = -panel_h / 2.0
+	panel.offset_bottom = panel_h / 2.0
+	layer.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 28)
+	panel.add_child(vbox)
+
+	var title_center := CenterContainer.new()
+	title_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(title_center)
+	title_center.add_child(_make_bitmap_text("JUSTICIERO", 26.0))
+
+	var btn_center := CenterContainer.new()
+	btn_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(btn_center)
+	var play_btn := _make_menu_button("JUGAR")
+	play_btn.pressed.connect(_on_menu_play_pressed.bind(layer))
+	btn_center.add_child(play_btn)
+
+func _on_menu_play_pressed(layer: CanvasLayer) -> void:
+	layer.queue_free()
+	_start_weapon_pick()

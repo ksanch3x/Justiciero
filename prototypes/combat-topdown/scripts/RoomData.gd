@@ -1,13 +1,14 @@
 extends RefCounted
 class_name RoomData
 
-## Datos estáticos de las 4 salas de la primera mazmorra de prueba
-## (room_1 -> elige puerta Este/Oeste -> room_2a/room_2b -> 1 puerta ->
-## room_boss). Mismo patrón que UpgradeTree.gd: todo dato, nada de escena
+## Datos estáticos de las 7 salas de la mazmorra (v2, cierre del demo):
+## room_1 -> elige puerta Este/Oeste -> room_2a/room_2b -> 1 puerta ->
+## room_3 -> elige puerta Este/Oeste -> room_4a/room_4b -> 1 puerta ->
+## room_boss. Mismo patrón que UpgradeTree.gd: todo dato, nada de escena
 ## nueva — Main.gd reposiciona los mismos 5 StaticBody2D de Props y
 ## reconstruye las paredes por código en vez de instanciar nada.
 ##
-## Las 4 salas comparten la MISMA geometría exterior (900x640, paredes en
+## Las 7 salas comparten la MISMA geometría exterior (900x640, paredes en
 ## los mismos 4 bordes) para no tocar los limit_* de la cámara ni el
 ## region_rect del fondo — lo único que cambia entre salas es qué pared
 ## tiene el hueco de puerta, qué props están visibles/dónde, el tinte del
@@ -57,7 +58,7 @@ static func _rooms() -> Dictionary:
 			"id": "room_2a",
 			"waves": 2,
 			"enemy_types": ["grunt", "runner"],
-			"doors": {"east": "room_boss"},
+			"doors": {"east": "room_3"},
 			"tint": Color(0.22, 0.15, 0.12, 1),
 			"is_boss": false,
 			"props": [
@@ -72,7 +73,7 @@ static func _rooms() -> Dictionary:
 			"id": "room_2b",
 			"waves": 2,
 			"enemy_types": ["grunt", "runner", "spitter"],
-			"doors": {"east": "room_boss"},
+			"doors": {"east": "room_3"},
 			"tint": Color(0.12, 0.16, 0.22, 1),
 			"is_boss": false,
 			"props": [
@@ -81,6 +82,51 @@ static func _rooms() -> Dictionary:
 				{"visible": true, "pos": Vector2(0, 240)},
 				{"visible": true, "pos": Vector2(-260, 240)},
 				{"visible": true, "pos": Vector2(260, -240)},
+			],
+		},
+		"room_3": {
+			"id": "room_3",
+			"waves": 3,
+			"enemy_types": ["grunt", "runner", "spitter"],
+			"doors": {"east": "room_4a", "west": "room_4b"},
+			"tint": Color(0.18, 0.18, 0.14, 1),
+			"is_boss": false,
+			"props": [
+				{"visible": true, "pos": Vector2(0, -240)},
+				{"visible": true, "pos": Vector2(-260, 0)},
+				{"visible": true, "pos": Vector2(260, 0)},
+				{"visible": true, "pos": Vector2(-180, 220)},
+				{"visible": true, "pos": Vector2(180, 220)},
+			],
+		},
+		"room_4a": {
+			"id": "room_4a",
+			"waves": 3,
+			"enemy_types": ["grunt", "runner", "spitter"],
+			"doors": {"east": "room_boss"},
+			"tint": Color(0.24, 0.10, 0.20, 1),
+			"is_boss": false,
+			"props": [
+				{"visible": true, "pos": Vector2(220, -200)},
+				{"visible": true, "pos": Vector2(-220, 200)},
+				{"visible": true, "pos": Vector2(0, 0)},
+				{"visible": true, "pos": Vector2(-260, -220)},
+				{"visible": true, "pos": Vector2(260, 220)},
+			],
+		},
+		"room_4b": {
+			"id": "room_4b",
+			"waves": 3,
+			"enemy_types": ["grunt", "runner", "spitter"],
+			"doors": {"east": "room_boss"},
+			"tint": Color(0.10, 0.20, 0.24, 1),
+			"is_boss": false,
+			"props": [
+				{"visible": true, "pos": Vector2(-220, -200)},
+				{"visible": true, "pos": Vector2(220, 200)},
+				{"visible": true, "pos": Vector2(0, -240)},
+				{"visible": true, "pos": Vector2(260, -220)},
+				{"visible": true, "pos": Vector2(-260, 220)},
 			],
 		},
 		"room_boss": {
