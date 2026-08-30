@@ -40,6 +40,7 @@ var _telegraph_time_left: float = 0.0
 
 var _state: State = State.PATROL
 var _spawn_position: Vector2
+var _spawn_captured: bool = false
 var _patrol_target: Vector2
 var _alert_time_left: float = 0.0
 
@@ -56,13 +57,20 @@ func _ready() -> void:
 	add_to_group("enemy")
 	_player = get_tree().get_first_node_in_group("player")
 	_anim.play("walk")
-	_spawn_position = global_position
-	_pick_patrol_target()
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player")
 		return
+
+	# global_position todavía es (0,0) durante _ready() — Main.gd la fija
+	# recién DESPUÉS de add_child() (cuidado técnico #3 de STATUS.md).
+	# Capturamos el punto de patrulla acá, en el primer frame de física, que
+	# corre después de que la posición ya quedó bien puesta.
+	if not _spawn_captured:
+		_spawn_captured = true
+		_spawn_position = global_position
+		_pick_patrol_target()
 
 	var to_player: Vector2 = _player.global_position - global_position
 	var dist_to_player: float = to_player.length()
