@@ -6,6 +6,7 @@ extends Node2D
 @export var police_scene: PackedScene = preload("res://scenes/Police.tscn")
 @export var criminal_scene: PackedScene = preload("res://scenes/Criminal.tscn")
 @export var civilian_scene: PackedScene = preload("res://scenes/Civilian.tscn")
+@export var loot_scene: PackedScene = preload("res://scenes/Loot.tscn")
 
 ## Sprite del jefe: fila sin usar hasta ahora del pack (fila 3, "morada"),
 ## ver STATUS.md sección "Mapa de assets". Son tiles 24x24 completos, igual
@@ -58,6 +59,45 @@ var _boss: CharacterBody2D = null
 ## deshabilitar/restaurar nodos fijos, así que el vano es simplemente un
 ## tramo que no se genera.
 var _open_door_sides: Array[String] = []
+
+## --- Botín y extracción (GDD Fase 5 / sección 1: entrar → recolectar →
+## extraer o morir). ---
+## Dinero recogido en ESTA corrida. Volátil a propósito: solo pasa a
+## SaveManager si el jugador extrae (_extract()). Morir lo pierde entero,
+## sin necesidad de ninguna lógica de castigo — simplemente nadie deposita.
+var _run_money: int = 0
+## true una vez extraído: evita depositar dos veces y marca que la corrida
+## terminó bien y no por muerte.
+var _extracted: bool = false
+## true cuando la corrida terminó de cualquier forma (extracción o muerte).
+## El HUD lo mira para no pisar el texto de resultado: _update_hud() sigue
+## llegando por _on_player_health_changed aunque _process ya esté apagado.
+var _run_over: bool = false
+
+## Cuánto del dinero de la corrida se lleva el jugador si extrae al salir
+## de la capa i del recorrido (ver Dungeon.LAYER_SIZES). Creciente a
+## propósito: extraer en la primera sala tiene que ser pobre pero no
+## inútil — si fuera 0 no sería una decisión, sería un botón de rendirse.
+## Matar al jefe paga BOSS_EXTRACTION_RATE, que es el único 100%.
+const EXTRACTION_RATES: Array[float] = [0.30, 0.45, 0.60, 0.80]
+const BOSS_EXTRACTION_RATE: float = 1.0
+## Reputación (GDD 2.4, moneda del Árbol permanente) por capa alcanzada.
+## No depende del dinero: premia haber llegado lejos, no haber saqueado.
+const REPUTATION_PER_LAYER: int = 3
+const REPUTATION_BOSS_BONUS: int = 10
+## Cuánto suelta un enemigo de oleada al caer. FIJO, no escalado por
+## oleada: las oleadas ya traen más enemigos cada vez
+## (enemies_increment_per_wave), así que el ingreso por sala ya crece solo.
+## Con un valor por enemigo que además subía por oleada, la curva quedaba
+## cuadrática y extraer temprano pasaba a valer ~1/40 de llegar al jefe —
+## o sea, no era una decisión. Simulado en Python antes de fijarlo.
+const LOOT_PER_ENEMY: int = 10
+## Valor centinela que UpgradeUI manda por `door_chosen` cuando el jugador
+## elige extraer en vez de una puerta. Es un "lado" que no existe, así se
+## reusa la señal que ya había en vez de inventar una segunda. UpgradeUI.gd
+## define la misma constante (no tiene class_name, no se puede referenciar
+## desde acá) — si se cambia una, cambiar la otra.
+const EXTRACT_SIDE: String = "extract"
 
 const PROP_NAMES: Array[String] = ["Cactus1", "Cactus2", "Bones1", "Bones2", "RockFormation"]
 const DEFAULT_TINT: Color = Color(0.16, 0.16, 0.22, 1)
@@ -254,14 +294,57 @@ func _spawn_enemy() -> void:
 		enemy.speed = enemy.speed * speed_scale
 		enemy.contact_damage = enemy.contact_damage + int(floor(float(wave_number - 1) / float(enemy_contact_damage_per_waves)))
 
-	enemy.died.connect(_on_enemy_died)
+	enemy.died.connect(_on_enemy_died.bind(enemy))
+	# GDD 2.3: noquear también saca al enemigo de la pelea. Sin esto
+	# `enemies_alive` nunca bajaba en un noqueo y la oleada no terminaba
+	# jamás — la vía sigilosa dejaba la corrida trabada. El botín cae
+	# igual: el cuerpo se saquea inconsciente o muerto.
+	enemy.knocked_out.connect(_on_enemy_died.bind(enemy))
 
 	add_child(enemy)
 	enemy.global_position = point
 	enemies_alive += 1
 
-func _on_enemy_died() -> void:
+## Un enemigo puede caer por dos vías (`died` letal y `knocked_out` no
+## letal) y, peor, seguir recibiendo balazos durante el fade de muerte —
+## take_damage() con health ya en 0 vuelve a emitir `died`. Sin este
+## registro eso descontaba dos veces de enemies_alive (oleada que termina
+## antes de tiempo) y soltaba botín duplicado.
+var _counted_dead: Array[int] = []
+
+func _on_enemy_died(enemy: Node2D) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var id: int = enemy.get_instance_id()
+	if _counted_dead.has(id):
+		return
+	_counted_dead.append(id)
+
 	enemies_alive -= 1
+	# `died`/`knocked_out` se emiten ANTES de que Fx.play_death libere el
+	# nodo, así que la posición todavía es válida acá.
+	_drop_loot(enemy.global_position, LOOT_PER_ENEMY)
+
+## Instancia un pickup de botín. `amount` va ANTES de add_child() porque lo
+## lee Loot._ready() (cuidado técnico #3 de STATUS.md); la posición,
+## después. Se clampea a la sala para que un enemigo empujado contra el
+## borde no deje el botín del otro lado del muro.
+func _drop_loot(pos: Vector2, amount: int, container: bool = false) -> void:
+	if amount <= 0:
+		return
+	var loot := loot_scene.instantiate()
+	loot.amount = amount
+	if container:
+		# Los contenedores fijos se leen distinto del botín de cadáver:
+		# están puestos por diseño en zonas de riesgo y valen más.
+		loot.body_color = Color(0.45, 0.85, 1.0, 1.0)
+	loot.picked.connect(_on_loot_picked)
+	add_child(loot)
+	loot.global_position = Arena.clamp_point(pos)
+
+func _on_loot_picked(amount: int) -> void:
+	_run_money += amount
+	_update_hud()
 
 ## Un solo policía patrullando desde el arranque, para poder probar la
 ## reacción al Nivel de Alerta (GDD Fase 3) sin todavía tener refuerzos ni
@@ -335,18 +418,89 @@ func _open_room_doors(room: Dictionary) -> void:
 	var doors: Dictionary = room["doors"]
 	if doors.is_empty():
 		return
-	if doors.size() > 1:
-		_choosing_upgrade = true
-		_upgrade_ui.show_choices(_player, "door_pick", doors)
-	else:
-		var side: String = doors.keys()[0]
-		_open_door(side, String(doors[side]["to"]))
+	# El panel se muestra SIEMPRE, incluso con una sola puerta: aunque no
+	# haya bifurcación, siempre hay una decisión que tomar — seguir o
+	# extraer con lo que llevás (GDD sección 1). Antes, con una puerta
+	# sola, se abría directo y no había dónde ofrecer la salida.
+	_choosing_upgrade = true
+	_upgrade_ui.show_choices(_player, "door_pick", doors, _extraction_offer())
+
+## Datos de la oferta de extracción para el panel: cuánto se llevaría el
+## jugador si saliera ahora. Se calcula en un solo lugar para que el número
+## que muestra la UI y el que se deposita no puedan divergir.
+func _extraction_offer() -> Dictionary:
+	var rate: float = _extraction_rate()
+	return {
+		"rate": rate,
+		"money": int(floor(float(_run_money) * rate)),
+		"total": _run_money,
+	}
+
+## Porcentaje del dinero que se lleva quien extrae desde la sala activa.
+## Depende de la CAPA del recorrido (los ids los arma Dungeon como
+## "r<capa>_<slot>", más "r_boss"), no de un contador propio: un contador
+## paralelo se puede desincronizar de la sala real, el id no.
+func _extraction_rate() -> float:
+	var layer: int = _current_layer()
+	if layer < 0:
+		return BOSS_EXTRACTION_RATE
+	return EXTRACTION_RATES[clampi(layer, 0, EXTRACTION_RATES.size() - 1)]
+
+## Índice de capa de la sala activa, o -1 si es la del jefe.
+func _current_layer() -> int:
+	var parts: PackedStringArray = current_room_id.split("_")
+	if parts.size() < 2 or not parts[0].begins_with("r"):
+		return 0
+	var digits: String = parts[0].substr(1)
+	if not digits.is_valid_int():
+		return -1
+	return int(digits)
 
 func _on_door_chosen(side: String) -> void:
 	_choosing_upgrade = false
+	if side == EXTRACT_SIDE:
+		_extract(false)
+		return
 	var room: Dictionary = Dungeon.get_room(current_room_id)
 	var doors: Dictionary = room["doors"]
 	_open_door(side, String(doors[side]["to"]))
+
+## Fin de corrida por la buena: deposita en SaveManager lo que corresponda
+## y para el juego. `full` = salió por haber matado al jefe (100% + una
+## cabeza); si no, es una extracción temprana con el porcentaje de la capa.
+func _extract(full: bool) -> void:
+	# `died` y `knocked_out` del jefe llegan acá por caminos distintos: si
+	# alguna vez se emitieran los dos, depositar dos veces sería una
+	# duplicación silenciosa de dinero.
+	if _extracted:
+		return
+	_extracted = true
+	_run_over = true
+	# if/else en vez de ternario a propósito (cuidado técnico #8 de
+	# STATUS.md): la inferencia de tipos de GDScript con `a if c else b` ya
+	# rompió varias veces en este proyecto.
+	var rate: float = _extraction_rate()
+	var layers_cleared: int = _current_layer() + 1
+	if full:
+		rate = BOSS_EXTRACTION_RATE
+		layers_cleared = Dungeon.LAYER_SIZES.size()
+	var gained_money: int = int(floor(float(_run_money) * rate))
+	var gained_rep: int = REPUTATION_PER_LAYER * layers_cleared
+	var gained_heads: int = 0
+	if full:
+		gained_rep += REPUTATION_BOSS_BONUS
+		gained_heads = 1
+
+	SaveManager.bank_run(gained_money, gained_rep, gained_heads)
+
+	set_process(false)
+	var lost: int = _run_money - gained_money
+	var head_text: String = ""
+	if full:
+		head_text = "   Cabezas: +1"
+	_hud.text = "EXTRACCIÓN (%d%%)   Dinero: %d de %d (perdés %d)   Reputación: +%d%s\nPresioná R para otra corrida." % [
+		int(round(rate * 100.0)), gained_money, _run_money, lost, gained_rep, head_text,
+	]
 
 ## Abre la puerta de `side`: la marca como abierta y regenera los muros
 ## (el vano es simplemente un tramo que _build_walls_for_room() ya no
@@ -641,6 +795,17 @@ func _apply_room(room: Dictionary) -> void:
 
 	_rebuild_walls()
 	_apply_camera_limits(room)
+	_apply_room_loot(room)
+
+## Contenedores fijos de botín de la sala (RoomData `loot`). El botín que
+## quedó sin recoger en la sala anterior se descarta: cruzaste la puerta,
+## lo dejaste ahí. Es lo que le da peso a la decisión de meterse a la
+## oficina sin salida ANTES de abrir la puerta.
+func _apply_room_loot(room: Dictionary) -> void:
+	for old in get_tree().get_nodes_in_group("loot"):
+		old.queue_free()
+	for entry in room["loot"]:
+		_drop_loot(entry["pos"], int(entry["amount"]), true)
 
 ## Cambia de sala activa y arranca lo que corresponda en la sala nueva
 ## (siguiente oleada, o el jefe si es room_boss). Los muros no se
@@ -687,6 +852,9 @@ func _spawn_boss() -> void:
 	boss.detection_range = 2000.0
 	boss.lose_track_range = 2000.0
 	boss.died.connect(_on_boss_died)
+	# Un jefe noqueado también está fuera de combate: sin esto, un noqueo
+	# al jefe lo sacaba de la pelea pero dejaba la corrida sin final.
+	boss.knocked_out.connect(_on_boss_died)
 	boss.health_changed.connect(_on_boss_health_changed)
 
 	add_child(boss)
@@ -721,18 +889,22 @@ func _make_boss_sprite_frames() -> SpriteFrames:
 
 func _on_boss_died() -> void:
 	_boss_mode = false
-	set_process(false)
-	_hud.text = "¡Jefe derrotado! Presioná R para reiniciar."
 	if is_instance_valid(_boss_bar_bg):
 		_boss_bar_bg.queue_free()
 	_boss_bar_bg = null
 	_boss_bar_fill_clip = null
+	# Matar al jefe ES la extracción completa: 100% del dinero y la cabeza.
+	# No hay puerta que elegir después — es el único final que paga todo.
+	_extract(true)
 
 func _on_player_health_changed(_current: int, _max_hp: int) -> void:
 	_update_hud()
 
 func _on_player_died() -> void:
-	_hud.text = "Muerto en oleada %d. Presiona R para reiniciar." % wave_number
+	# Nadie llama a SaveManager.bank_run(): morir pierde el botín entero,
+	# que es la contracara de que extraer temprano rinda poco.
+	_run_over = true
+	_hud.text = "Muerto en oleada %d. Perdiste %d de botín. Presiona R para reiniciar." % [wave_number, _run_money]
 	set_process(false)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -740,6 +912,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().reload_current_scene()
 
 func _update_hud() -> void:
+	# Una vez terminada la corrida el HUD ya dice el resultado: no hay que
+	# pisarlo con el texto de oleada, que sigue llegando por
+	# _on_player_health_changed aunque _process esté apagado.
+	if _run_over:
+		return
+
 	var hp: int = 0
 	var max_hp: int = 0
 	if is_instance_valid(_player):
@@ -751,7 +929,7 @@ func _update_hud() -> void:
 	# del jugador al día (esto se llama también desde
 	# _on_player_health_changed mientras _boss_mode es true).
 	if _boss_mode:
-		_hud.text = "Sala del Jefe — ¡Derrotalo!   Vida: %d/%d" % [hp, max_hp]
+		_hud.text = "Sala del Jefe — ¡Derrotalo!   Vida: %d/%d   Botín: %d (100%% si lo matás)" % [hp, max_hp, _run_money]
 		return
 
 	var alive_or_pending := enemies_alive + enemies_to_spawn
@@ -773,7 +951,12 @@ func _update_hud() -> void:
 	# solo mirando la pantalla.
 	var cover_text: String = "   [Cobertura]" if is_instance_valid(_player) and _player.in_cover else ""
 
-	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s%s%s" % [wave_number, hp, max_hp, alive_or_pending, ammo_text, alert_text, notoriety_text, cover_text]
+	# Botín de la corrida + cuánto se llevaría extrayendo ahora. Sin el
+	# segundo número la decisión de extraer sería a ciegas, y toda la
+	# tensión del core loop depende de poder compararla con seguir.
+	var loot_text: String = "   Botín: %d (extraés %d)" % [_run_money, int(floor(float(_run_money) * _extraction_rate()))]
+
+	_hud.text = "Oleada: %d   Vida: %d/%d   Enemigos restantes: %d%s%s%s%s%s" % [wave_number, hp, max_hp, alive_or_pending, loot_text, ammo_text, alert_text, notoriety_text, cover_text]
 
 # ---------------------------------------------------------------------------
 # UI kit del pack (barra de vida del jefe, menú principal) — ver STATUS.md

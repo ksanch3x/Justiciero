@@ -180,4 +180,6 @@ func _instantiate_template(template_id: String, room_id: String) -> Dictionary:
 	room["template"] = template_id
 	if not room.has("blockers"):
 		room["blockers"] = []
+	if not room.has("loot"):
+		room["loot"] = []
 	return room

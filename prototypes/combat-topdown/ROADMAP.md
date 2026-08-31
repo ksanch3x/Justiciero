@@ -13,7 +13,7 @@ referencia viva; este archivo es el mapa de arriba.
 | 2. IA básica de enemigo | ✅ | PATROL/ALERT/CHASE/ATTACK + cono de visión real |
 | 3. Alerta + Policía + Notoriedad | ✅ | Medidor 0-100, policía que reacciona al ruido, Notoriedad persistida en disco |
 | 4. Triángulo completo | ✅ | Policía↔Criminal pelean solos; testigos civiles |
-| 5. Estructura de misión | ⚠️ parcial | Salas con forma real y encadenadas — **falta extracción y botín** |
+| 5. Estructura de misión | ✅ | Salas con forma real, botín recogible y extracción con penalización por salir temprano |
 | 6. Generación procedural | ✅ | El recorrido se arma en cada corrida desde plantillas |
 | 7. Hub + progresión permanente | ❌ | Nada hecho. Es lo más grande que falta |
 
@@ -46,6 +46,11 @@ Agrupado por tema, con el commit donde quedó.
 - Testigos civiles (`5044499`).
 - Salas con forma (unión de rectángulos), muros generados por código,
   cámara por sala (`dd28928`).
+- **Botín y extracción (Fase 5, Etapa A)**: pickup de botín de cadáveres y
+  de contenedores fijos por sala; opción "Extraer" en cada transición, con
+  un porcentaje del dinero que crece con la profundidad (30/45/60/80%) y
+  el 100% + una cabeza solo por matar al jefe; `money`/`reputation`/`heads`
+  persistidos. Morir pierde todo.
 - Recorrido generado por corrida (`95b3a9a`).
 
 **Bugs encontrados jugando y corregidos**
@@ -56,6 +61,8 @@ Agrupado por tema, con el commit donde quedó.
 - Noqueo imposible de acertar: rango de 40px y **cero feedback visual**
   (`aa1e129`).
 - Bots patrullando alrededor de (0,0) en vez de su spawn (`aa48511`).
+- Noquear a un enemigo de oleada no bajaba `enemies_alive`: la oleada no
+  terminaba nunca y la vía sigilosa trababa la corrida.
 - Resolución nunca fijada, y dos salas más chicas que la vista — Godot no
   puede satisfacer límites de cámara menores al viewport (`b247b72`).
 
@@ -70,7 +77,7 @@ python3 tools/check_balance.py     # balance de ()[]{} en los .gd
 ```
 
 `validate_rooms.py` chequea que la unión de rects de cada sala esté
-conectada, que spawns/props/entrada caigan dentro y no pisen un muro
+conectada, que spawns/props/contenedores de botín/entrada caigan dentro y no pisen un muro
 interior, que las puertas caigan sobre el borde, y que existan suficientes
 plantillas para bifurcar. Se probó metiéndole errores a propósito: los
 detecta. **Correrlo después de tocar `RoomData.gd`.**
@@ -110,6 +117,9 @@ Por tamaño e impacto, en orden:
    morir no duela: hoy `UpgradeTree.gd` es progresión *por corrida* y se
    pierde al morir. También falta Reputación (nunca implementada) y el
    mecanismo de bajar Notoriedad, que necesita un Hub donde vivir.
-3. **Cerrar la Fase 5**: extracción y botín. Hoy se llega al jefe pero no
-   hay "volver con lo recolectado", que es medio core loop del GDD.
+3. **Fase 5, Etapa B**: la misión "edificio" — subir piso por piso el
+   mismo plano de oficinas, con la presión escalando por piso (más
+   policía, Alerta base más alta, menos cobertura) y dos escaleras que
+   llevan a variantes distintas. Se separó de la Etapa A a propósito:
+   primero jugar el core loop, después construir la misión encima.
 4. Cambio de assets, y otra pasada de balance con más partidas jugadas.

@@ -9,8 +9,17 @@ var _player: CharacterBody2D
 ## Lado -> id de sala destino, guardado por show_choices() en modo
 ## "door_pick" (ver RoomData.doors). Solo se usa dentro de ese modo.
 var _doors: Dictionary = {}
+## Oferta de extracción del momento (Main._extraction_offer()):
+## {"rate": float, "money": int, "total": int}. Vacío = no ofrecer salida.
+var _extraction: Dictionary = {}
 
 const DOOR_LABELS: Dictionary = {"east": "Puerta Este", "west": "Puerta Oeste"}
+## "Lado" centinela con el que se emite door_chosen cuando el jugador elige
+## extraer en vez de cruzar una puerta — reusa la señal que ya existía en
+## lugar de agregar una segunda. Main.gd define la misma constante (esta
+## escena no tiene class_name, no se puede referenciar desde allá): si se
+## cambia una, hay que cambiar la otra.
+const EXTRACT_SIDE: String = "extract"
 ## Orden fijo de recorrido para que "Este" siempre aparezca antes que "Oeste"
 ## sin depender del orden de inserción del Dictionary de la sala.
 const DOOR_SIDE_ORDER: Array[String] = ["east", "west"]
@@ -24,11 +33,13 @@ func _ready() -> void:
 ## mode: "weapon_pick" (elección inicial, cuchillo vs hacha), "milestone"
 ## (cada MILESTONE_EVERY oleadas: subir de nivel vs arma nueva), "upgrade"
 ## (mejoras normales del árbol, filtradas por el arma equipada), o
-## "door_pick" (fin de sala con 2 puertas: elegir por cuál seguir; `doors`
-## trae el mapeo lado->sala destino de RoomData, ver Main._open_room_doors).
-func show_choices(player: CharacterBody2D, mode: String = "upgrade", doors: Dictionary = {}) -> void:
+## "door_pick" (sala despejada: elegir por cuál puerta seguir, o extraer;
+## `doors` trae el mapeo lado->sala destino, y `extraction` la oferta de
+## salida — ver Main._open_room_doors y Main._extraction_offer).
+func show_choices(player: CharacterBody2D, mode: String = "upgrade", doors: Dictionary = {}, extraction: Dictionary = {}) -> void:
 	_player = player
 	_doors = doors
+	_extraction = extraction
 
 	for child in _buttons_container.get_children():
 		child.queue_free()
@@ -41,7 +52,7 @@ func show_choices(player: CharacterBody2D, mode: String = "upgrade", doors: Dict
 			_title.text = "¡Hito! Elegí un arma nueva o mejorá la que tenés"
 			_show_milestone_choices()
 		"door_pick":
-			_title.text = "¡Sala despejada! Elegí por dónde seguir"
+			_title.text = "¡Sala despejada! Seguir adelante o extraer"
 			_show_door_pick_choices()
 		_:
 			_title.text = "¡Oleada superada! Elegí una mejora:"
@@ -54,6 +65,19 @@ func _show_door_pick_choices() -> void:
 		var btn := _make_card_button(null, Rect2(), DOOR_LABELS[side], "Cruzá para continuar por este camino")
 		btn.pressed.connect(_on_door_picked.bind(side))
 		_buttons_container.add_child(btn)
+
+	# Tercera opción: irse con lo puesto (GDD sección 1, "extraer o
+	# morir"). Va con los números concretos porque la decisión sin ellos
+	# es a ciegas — no se puede pesar codicia contra riesgo sin saber
+	# cuánto se pierde por salir ahora.
+	if not _extraction.is_empty():
+		var take: int = int(_extraction["money"])
+		var total: int = int(_extraction["total"])
+		var pct: int = int(round(float(_extraction["rate"]) * 100.0))
+		var desc: String = "Terminás la corrida y te llevás %d de %d (%d%%). Lo demás se pierde." % [take, total, pct]
+		var extract_btn := _make_card_button(null, Rect2(), "Extraer ahora", desc)
+		extract_btn.pressed.connect(_on_door_picked.bind(EXTRACT_SIDE))
+		_buttons_container.add_child(extract_btn)
 	show()
 
 func _show_weapon_pick_choices() -> void:

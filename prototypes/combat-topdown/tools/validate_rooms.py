@@ -97,6 +97,24 @@ def parse_room_body(body):
                     }
                 )
 
+    # Contenedores fijos de botin (Fase 5). Mismo formato que props pero
+    # sin "visible": {"pos": Vector2(x, y), "amount": n}.
+    loot_m = re.search(r'"loot": \[(.*?)\]', body, re.S)
+    room["loot"] = []
+    if loot_m:
+        for line in loot_m.group(1).splitlines():
+            pos = re.search(
+                r'"pos":\s*Vector2\(\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\)', line
+            )
+            amt = re.search(r'"amount":\s*(\d+)', line)
+            if pos and amt:
+                room["loot"].append(
+                    {
+                        "pos": (float(pos.group(1)), float(pos.group(2))),
+                        "amount": int(amt.group(1)),
+                    }
+                )
+
     room["door_slots"] = {}
     sm = re.search(r'"door_slots": \{(.*?)\}', body, re.S)
     if sm:
@@ -252,6 +270,18 @@ def main():
             elif in_blocker(p["pos"], room["blockers"], BODY_RADIUS):
                 problems.append(
                     f"{rid}: props[{i}] visible en {p['pos']} pisa un muro interior"
+                )
+
+        # El botin se recoge caminandole por encima: si cae fuera de la
+        # sala o dentro de un muro interior es dinero que no existe.
+        for i, l in enumerate(room["loot"]):
+            if not inside(l["pos"], rects, BODY_RADIUS):
+                problems.append(
+                    f"{rid}: loot[{i}] en {l['pos']} cae fuera de la union"
+                )
+            elif in_blocker(l["pos"], room["blockers"], BODY_RADIUS):
+                problems.append(
+                    f"{rid}: loot[{i}] en {l['pos']} pisa un muro interior"
                 )
 
         for side, pos in room["door_slots"].items():

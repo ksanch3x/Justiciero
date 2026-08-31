@@ -69,6 +69,13 @@ class_name RoomData
 ##   props: Array[Dictionary] — 5 entradas, una por StaticBody2D fijo de
 ##                            Props (mismo orden que PROP_NAMES):
 ##                            {"visible": bool, "pos": Vector2}.
+##   loot: Array[Dictionary] — contenedores fijos de botín (Fase 5):
+##                            {"pos": Vector2, "amount": int}. Se colocan a
+##                            propósito en las zonas de riesgo (oficinas sin
+##                            salida, esquinas expuestas): el botín tiene que
+##                            costar algo, si no la decisión de extraer no
+##                            existe. Misma regla que props: dentro de la
+##                            unión y sin pisar un blocker (validado).
 ##   tint: Variant          — Color para el CanvasModulate, o null para el
 ##                            tinte por defecto de Main.tscn.
 ##   is_boss: bool          — true solo en la plantilla del jefe.
@@ -91,6 +98,10 @@ static func _templates() -> Dictionary:
 		# más simple que ya no es una caja.
 		"cruz": {
 			"id": "cruz",
+			"loot": [
+				{"pos": Vector2(-520, 0), "amount": 25},
+				{"pos": Vector2(-300, 210), "amount": 20},
+			],
 			"rects": [
 				Rect2(-360, -260, 480, 520),
 				Rect2(100, -60, 300, 120),
@@ -119,6 +130,10 @@ static func _templates() -> Dictionary:
 		# la del sur lleva a la salida.
 		"oficinas": {
 			"id": "oficinas",
+			"loot": [
+				{"pos": Vector2(380, -170), "amount": 35},
+				{"pos": Vector2(380, 170), "amount": 25},
+			],
 			"rects": [
 				Rect2(-420, -280, 540, 560),
 				Rect2(100, -230, 360, 460),
@@ -153,6 +168,10 @@ static func _templates() -> Dictionary:
 		# donde Policía y Criminal tienen espacio real para cruzarse.
 		"estacionamiento": {
 			"id": "estacionamiento",
+			"loot": [
+				{"pos": Vector2(-390, -280), "amount": 30},
+				{"pos": Vector2(390, 280), "amount": 25},
+			],
 			"rects": [
 				Rect2(-440, -320, 880, 640),
 			],
@@ -188,6 +207,10 @@ static func _templates() -> Dictionary:
 		# expuesta — casi sin cobertura, obliga a leer las patrullas.
 		"anden": {
 			"id": "anden",
+			"loot": [
+				{"pos": Vector2(-200, 180), "amount": 30},
+				{"pos": Vector2(240, 180), "amount": 30},
+			],
 			"rects": [
 				Rect2(-620, -80, 1240, 160),
 				Rect2(-280, 60, 160, 190),
@@ -215,6 +238,9 @@ static func _templates() -> Dictionary:
 		# lado — buen terreno para que una patrulla te sorprenda.
 		"ele": {
 			"id": "ele",
+			"loot": [
+				{"pos": Vector2(-300, 220), "amount": 35},
+			],
 			"rects": [
 				Rect2(-420, -280, 500, 280),
 				Rect2(-420, -20, 240, 300),
@@ -241,6 +267,10 @@ static func _templates() -> Dictionary:
 		# de botella real, se pelea distinto a cada lado.
 		"camaras": {
 			"id": "camaras",
+			"loot": [
+				{"pos": Vector2(-400, 200), "amount": 25},
+				{"pos": Vector2(400, -200), "amount": 25},
+			],
 			"rects": [
 				Rect2(-460, -240, 360, 480),
 				Rect2(-120, -90, 260, 180),
@@ -268,6 +298,7 @@ static func _templates() -> Dictionary:
 		# dónde esconderse, a propósito.
 		"arena_jefe": {
 			"id": "arena_jefe",
+			"loot": [],
 			"rects": [
 				Rect2(-460, -320, 920, 640),
 			],

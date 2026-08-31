@@ -703,6 +703,54 @@ demo terminaba rápido y no se veía cuánto le faltaba al jefe).
   de vida del jefe se vea bien y baje visiblemente con cada golpe, y que el
   menú principal (panel/fuente bitmap/botón) se vea y clickee bien.
 
+### Botín y extracción (`scripts/Loot.gd`, `scenes/Loot.tscn`) — GDD Fase 5
+
+Cierra el core loop del GDD (sección 1): *entrar → recolectar → extraer o
+morir*. Antes se llegaba al jefe y ahí se acababa, sin nada que llevarse y
+sin ninguna decisión sobre cuándo irse.
+
+**Botín.** `Loot.tscn` es un `Area2D` (layer 0, mask 1: solo detecta al
+jugador) que se recoge caminándole por encima. Dos fuentes:
+- **Cadáveres**: `Main._on_enemy_died()` suelta `LOOT_PER_ENEMY` donde cayó
+  el enemigo. Vale fijo, no escalado por oleada — las oleadas ya traen más
+  enemigos cada vez, y con el valor por enemigo escalando además, la curva
+  quedaba cuadrática (extraer temprano valía ~1/40 de llegar al jefe, o sea
+  no era una decisión). Verificado simulando la economía en Python.
+- **Contenedores fijos**: clave `loot` de cada plantilla en `RoomData.gd`,
+  puestos a propósito en zonas de riesgo (las oficinas sin salida). Se
+  pintan de otro color. `tools/validate_rooms.py` valida que caigan dentro
+  de la sala y no pisen un muro interior, igual que los props.
+
+El botín sin recoger se descarta al cambiar de sala (`_apply_room_loot()`
+limpia el grupo `"loot"`): cruzaste la puerta, lo dejaste ahí. Eso es lo
+que obliga a decidir si entrar a la oficina sin salida ANTES de abrir.
+
+**Extracción.** El panel de fin de sala (`UpgradeUI`, modo `door_pick`)
+ahora se muestra SIEMPRE, incluso con una sola puerta, porque siempre hay
+una decisión: seguir o salir. La tercera tarjeta emite `door_chosen` con el
+lado centinela `"extract"` (constante duplicada en `Main.gd` y
+`UpgradeUI.gd` — no hay `class_name` que compartir; si se cambia una,
+cambiar la otra).
+
+Cuánto se lleva sale de la CAPA del recorrido, derivada del id de sala que
+arma `Dungeon` (`r<capa>_<slot>`, `r_boss`) en vez de un contador propio
+que se pueda desincronizar: `EXTRACTION_RATES = [30%, 45%, 60%, 80%]`, y
+matar al jefe es el único 100% (+1 cabeza). Morir no llama a
+`SaveManager.bank_run()` y por eso pierde todo — no hace falta lógica de
+castigo, alcanza con que nadie deposite.
+
+**Monedas.** `SaveManager` suma `money`/`reputation`/`heads` al mismo
+`ConfigFile` que ya guardaba la Notoriedad. Se acreditan **solo** en
+`bank_run()`, que solo llama `Main._extract()`. Todavía no hay dónde
+gastarlas: eso es el Hub (Fase 7).
+
+**Bug arreglado de paso**: noquear a un enemigo de oleada emitía
+`knocked_out` pero nunca `died`, así que `enemies_alive` no bajaba y la
+oleada no terminaba jamás — la vía sigilosa dejaba la corrida trabada.
+Ahora ambas señales van al mismo handler, con un registro de ids ya
+contados (`_counted_dead`) porque un cuerpo puede seguir recibiendo balazos
+durante el fade de muerte y volver a emitir `died`.
+
 ## Capas de colisión (importante para no romper nada al agregar cosas)
 
 | Capa (bit) | Quién | Mask |
